@@ -13,13 +13,34 @@ contract AldersonDiceNFT is ERC6909 {
     address public gameLogic;
     uint256 public nextTokenId = 0;
 
-    string public constant name = "Alderson Dice";
-    string public constant symbol = "DICE";
+    mapping(uint256 id => uint256 amount) public cooldowns;
+
+    string public constant name = "AldersonDice";
+    string public constant symbol = "AD";
+
+    uint256 public immutable maxCooldownDelta;
 
     // TODO: baseUri?
 
-    constructor(address _gameLogic) {
+    constructor(address _gameLogic, uint256 _maxCooldownDelta) {
         gameLogic = _gameLogic;
+        maxCooldownDelta = _maxCooldownDelta;
+    }
+
+    function setCooldown(uint256 id, uint256 cooldown) external {
+        require(msg.sender == gameLogic, "!auth");
+
+        uint256 maxCooldown = block.timestamp + maxCooldownDelta;
+
+        if (cooldown > maxCooldown) {
+            cooldown = maxCooldown;
+        }
+
+        cooldowns[id] = cooldown;
+    }
+
+    function _preTransferCheck(address sender, uint256 tokenId, uint256 amount) internal override {
+        require(cooldowns[tokenId] <= block.timestamp, "cooldown");
     }
 
     // TODO: two-phase commit

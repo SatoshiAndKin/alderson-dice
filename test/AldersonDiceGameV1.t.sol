@@ -20,14 +20,14 @@ contract AldersonDiceGameV1Test is Test {
 
         ERC4626 vault = ERC4626(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
 
-        nft = new AldersonDiceNFT(owner);
+        nft = new AldersonDiceNFT(owner, 1 days);
 
         game = new AldersonDiceGameV1(owner, nft, vault);
 
         nft.upgrade(address(game));
     }
 
-    function test_twoDiceSkirmish() public {
+    function test_twoDiceSkirmish() public view {
         uint16 color0 = game.color(0);
         uint16 color1 = game.color(1);
         
@@ -51,8 +51,9 @@ contract AldersonDiceGameV1Test is Test {
         require(ties < wins1);
     }
 
-    function veryslow_testFuzz_mint(address to, uint256 amount) public {
+    function testFuzz_mint(address to, uint256 amount) public {
         vm.assume(amount > 0);
+        vm.assume(amount < 100);
 
         vm.prank(address(game));
         nft.mint(to, amount);

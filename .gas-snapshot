@@ -1,0 +1,2 @@
+AldersonDiceGameV1Test:testFuzz_mint(address,uint256) (runs: 256, μ: 423184, ~: 114500)
+AldersonDiceGameV1Test:test_twoDiceSkirmish() (gas: 38974)

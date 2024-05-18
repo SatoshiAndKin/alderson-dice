@@ -16,24 +16,28 @@ contract AldersonDiceGameV1 is Ownable {
     }
 
     struct Player {
-        bool paid;
         uint256 wins;
         uint256 ties;
         uint256 losses;
 
+        // TODO: the dice bags should be nfts instead of a player only having one
         // TODO: this is too simple. think more about this. probably have "tournament" contracts with blinding and other cool things
         // TODO: let people use a contract to pick from the dice bag?
+        bool ownsDiceBag;
         uint256[10] diceBag;
-
     }
 
-    event ScoreCard(string x);
+    event FirstDiceBag(address player, uint256[10] diceBag);
+    // event ScoreCard(string x);
 
     uint8 public constant NUM_COLORS = 5;
     uint8 public constant NUM_SIDES = 6;
     AldersonDiceNFT public immutable nft;
 
+    /// @notice the source of prizes for this game
     ERC4626 public immutable vaultToken;
+    
+    /// @notice this is looked up during construction. it is the vault token's asset
     ERC20 public immutable prizeToken;
 
     /// @notice rug prevention while still allowing upgrades during develoment
@@ -41,7 +45,7 @@ contract AldersonDiceGameV1 is Ownable {
     address public devFund;
 
     // TODO: store in an immutable instead?
-    DieType[NUM_COLORS] public dice;
+    DieType[NUM_COLORS] public diceTypes;
 
     // // TODO: tracking this on chain seems like too much state. but maybe we could use it for something. think more before adding this
     // struct Dice {
@@ -64,21 +68,22 @@ contract AldersonDiceGameV1 is Ownable {
 
         ERC20(prizeToken).approve(address(_vaultToken), type(uint256).max);
 
-        dice[0] = DieType([uint32(4), 4, 4, 4, 4, 9], "red");
-        dice[1] = DieType([uint32(3), 3, 3, 3, 8, 8], "yellow");
-        dice[2] = DieType([uint32(2), 2, 2, 7, 7, 7], "blue");
-        dice[3] = DieType([uint32(1), 1, 6, 6, 6, 6], "magenta");
-        dice[4] = DieType([uint32(0), 5, 5, 5, 5, 5], "olive");
+        // grime dice
+        diceTypes[0] = DieType([uint32(4), 4, 4, 4, 4, 9], "red");
+        diceTypes[1] = DieType([uint32(3), 3, 3, 3, 8, 8], "yellow");
+        diceTypes[2] = DieType([uint32(2), 2, 2, 7, 7, 7], "blue");
+        diceTypes[3] = DieType([uint32(1), 1, 6, 6, 6, 6], "magenta");
+        diceTypes[4] = DieType([uint32(0), 5, 5, 5, 5, 5], "olive");
     }
 
     function resetApproval() public {
         address(prizeToken).safeApproveWithRetry(address(vaultToken), type(uint256).max);
     }
 
-    // TODO: do we want to somehow blind this until after the dice is minted?
+    // TODO: do we want to somehow blind this until after the dice is buyDiceed?
     // this is here so that the game logic can upgrade but colors won't change
-    function color(uint256 tokenId) view public returns (uint8) {
-        return uint8(uint256(keccak256(abi.encodePacked(address(nft), tokenId))) % NUM_COLORS);
+    function color(uint256 diceId) view public returns (uint8) {
+        return uint8(uint256(keccak256(abi.encodePacked(address(nft), diceId))) % NUM_COLORS);
     }
 
     function upgrade(address _newGameLogic) public onlyOwner {
@@ -99,8 +104,8 @@ contract AldersonDiceGameV1 is Ownable {
         uint256 color1 = color(dice1);
 
         // TODO: do we want to copy into memory here? i think so
-        DieType memory die0 = dice[color0];
-        DieType memory die1 = dice[color1];
+        DieType memory die0 = diceTypes[color0];
+        DieType memory die1 = diceTypes[color1];
 
         for (uint16 round = 0; round < rounds; round++) {
             uint8 side0 = rollDie(seed, dice0, round);
@@ -160,23 +165,104 @@ contract AldersonDiceGameV1 is Ownable {
         return uint8(uint256(keccak256(abi.encodePacked(seed, dieId, round))) % 6);
     }
 
-    function mint(address receiver, uint256 amount) public {
-        // TODO: what should price be?
-        uint256 price = 0;
-
-        uint256 cost = amount * price;
-
-        address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
-
-        uint256 shares = vaultToken.deposit(cost, address(this));
-
+    // TODO: i don't like the name "buyDice"
+    function _buyDice(address receiver, uint256 numDice, uint256 cost, uint256 shares) internal {
         // because of possible rounding errors. keep both "cost" and "half_cost" around
         // TODO: how much should we actually take? every other game takes 100%, so 50% seems like a good start to me
         uint256 half_shares = shares / 2;
 
         // TODO: keep track of share ownership here! some goes to the receiver, some goes to the dev fund
 
-        nft.mint(receiver, amount);
+        nft.mint(receiver, numDice);
+    }
+
+    function buyDiceBag(address receiver) public {
+        buyNumDice(receiver, 10);
+
+        Player storage player = players[receiver];
+
+        // if this is the first bag, set up the player
+        if (!player.ownsDiceBag) {
+            player.ownsDiceBag = true;
+
+            for (uint8 i = 0; i < 10; i++) {
+                player.diceBag[i] = nft.nextTokenId() - 1 - i;
+            }
+
+            emit FirstDiceBag(receiver, player.diceBag);
+        }
+    }
+
+    // TODO: how should we allow people to set their dice bags? let players approve another contract to do it. maybe just overload the operator on the NFT?
+    function setDiceBag(address _player, uint256[10] calldata dice) public {
+        require(players[_player].ownsDiceBag, "!bag");
+
+        require(_player == msg.sender || nft.isOperator(_player, msg.sender), "!auth");
+   
+        Player storage player = players[_player];
+
+        for (uint8 i = 0; i < 10; i++) {
+            require(nft.balanceOf(_player, dice[i]) > 0, "!bal");
+
+            player.diceBag[i] = dice[i];
+        }
+    }
+
+    function buyNumDice(address receiver, uint256 numDice) public {
+        uint256 p = price();
+
+        // no rounding errors are possible with this one
+        uint256 cost = numDice * p;
+
+        address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
+
+        uint256 shares = vaultToken.deposit(cost, address(this));
+
+        _buyDice(receiver, numDice, cost, shares);
+    }
+
+    function buyDiceWithTotalCost(address receiver, uint256 cost) public {
+        uint256 p = price();
+
+        uint256 numDice = cost / p;
+
+        // handle rounding errors. don't take excess
+        cost = numDice * p;
+
+        address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
+
+        uint256 shares = vaultToken.deposit(cost, address(this));
+
+        _buyDice(receiver, numDice, cost, shares);
+    }
+
+    /// @notice use this if you already have vault tokens
+    function buyDiceWithVaultShares(address receiver, uint256 shares) public {
+        uint256 p = price();
+
+        uint256 cost = vaultToken.convertToAssets(shares);
+
+        // handle rounding errors. don't take excess
+        cost -= (cost % p);
+
+        shares = vaultToken.convertToShares(cost);
+
+        uint256 numDice = cost / p;
+
+        address(vaultToken).safeTransferFrom(msg.sender, address(this), shares);
+
+        _buyDice(receiver, numDice, cost, shares);
+    }
+
+    // TODO: deposit tokens without mining any dice
+    // function sponsor()
+
+    // TODO: thank you for your sponsorship
+    // function withdrawSponsership()
+
+    function price() public view returns (uint256) {
+        // TODO: what should price be?
+        return 10 * prizeToken.decimals();
     }
 
     // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme

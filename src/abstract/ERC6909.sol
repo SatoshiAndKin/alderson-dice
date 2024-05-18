@@ -44,12 +44,17 @@ abstract contract ERC6909 {
     /// @notice Checks if a spender is approved by an owner as an operator.
     mapping(address owner => mapping(address spender => bool)) public isOperator;
 
+    function _preTransferCheck(address sender, uint256 id, uint256 amount) internal virtual;
+
     /// @notice Transfers an amount of an id from the caller to a receiver.
     /// @param receiver The address of the receiver.
     /// @param id The id of the token.
     /// @param amount The amount of the token.
     function transfer(address receiver, uint256 id, uint256 amount) public returns (bool) {
         if (balanceOf[msg.sender][id] < amount) revert InsufficientBalance(msg.sender, id);
+
+        _preTransferCheck(msg.sender, id, amount);
+
         balanceOf[msg.sender][id] -= amount;
         balanceOf[receiver][id] += amount;
         emit Transfer(msg.sender, msg.sender, receiver, id, amount);
@@ -70,6 +75,9 @@ abstract contract ERC6909 {
             }
         }
         if (balanceOf[sender][id] < amount) revert InsufficientBalance(sender, id);
+
+        _preTransferCheck(msg.sender, id, amount);
+
         balanceOf[sender][id] -= amount;
         balanceOf[receiver][id] += amount;
         emit Transfer(msg.sender, sender, receiver, id, amount);
