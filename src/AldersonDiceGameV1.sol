@@ -40,9 +40,8 @@ contract AldersonDiceGameV1 is Ownable {
     /// @notice this is looked up during construction. it is the vault token's asset
     ERC20 public immutable prizeToken;
 
-    /// @notice rug prevention while still allowing upgrades during develoment
-    bool public released;
     address public devFund;
+    uint256 public price;
 
     // TODO: store in an immutable instead?
     DieType[NUM_COLORS] public diceTypes;
@@ -58,11 +57,13 @@ contract AldersonDiceGameV1 is Ownable {
 
     mapping(uint256 => DieType) public scoreCard;
 
-    constructor(address _owner, AldersonDiceNFT _nft, ERC4626 _vaultToken) Ownable() {
+    constructor(address _owner, address _devFund, AldersonDiceNFT _nft, ERC4626 _vaultToken, uint256 _initialPrice) Ownable() {
         _initializeOwner(_owner);
 
+        devFund = _devFund;
         nft = _nft;
         vaultToken = _vaultToken;
+        price = _initialPrice;
 
         prizeToken = ERC20(vaultToken.asset());
 
@@ -87,14 +88,11 @@ contract AldersonDiceGameV1 is Ownable {
     }
 
     function upgrade(address _newGameLogic) public onlyOwner {
-        require(!released);
-
         nft.upgrade(_newGameLogic);
     }
 
     function release() public onlyOwner {
-        _initializeOwner(address(0));
-        released = true;
+        _setOwner(address(0));
     }
 
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
@@ -167,6 +165,10 @@ contract AldersonDiceGameV1 is Ownable {
 
     // TODO: i don't like the name "buyDice"
     function _buyDice(address receiver, uint256 numDice, uint256 cost, uint256 shares) internal {
+        Player storage player = players[receiver];
+
+        require(player.ownsDiceBag, "!bag");
+
         // because of possible rounding errors. keep both "cost" and "half_cost" around
         // TODO: how much should we actually take? every other game takes 100%, so 50% seems like a good start to me
         uint256 half_shares = shares / 2;
@@ -208,11 +210,16 @@ contract AldersonDiceGameV1 is Ownable {
         }
     }
 
+    // TODO: do something cool with a dutch auction?
+    function setPrice(uint256 _price) public onlyOwner {
+        price = _price;
+    }
+
     function buyNumDice(address receiver, uint256 numDice) public {
-        uint256 p = price();
+        require(numDice > 0, "!dice");
 
         // no rounding errors are possible with this one
-        uint256 cost = numDice * p;
+        uint256 cost = numDice * price;
 
         address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
 
@@ -222,12 +229,14 @@ contract AldersonDiceGameV1 is Ownable {
     }
 
     function buyDiceWithTotalCost(address receiver, uint256 cost) public {
-        uint256 p = price();
+        uint256 cachedPrice = price;
 
-        uint256 numDice = cost / p;
+        uint256 numDice = cost / price;
+
+        require(numDice > 0, "!dice");
 
         // handle rounding errors. don't take excess
-        cost = numDice * p;
+        cost = numDice * price;
 
         address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
 
@@ -238,16 +247,20 @@ contract AldersonDiceGameV1 is Ownable {
 
     /// @notice use this if you already have vault tokens
     function buyDiceWithVaultShares(address receiver, uint256 shares) public {
-        uint256 p = price();
+        uint256 cachedPrice = price;
 
         uint256 cost = vaultToken.convertToAssets(shares);
 
         // handle rounding errors. don't take excess
-        cost -= (cost % p);
+        cost -= (cost % cachedPrice);
 
+        // update shares in case of excess
         shares = vaultToken.convertToShares(cost);
 
-        uint256 numDice = cost / p;
+        // no rounding errors are possible thanks to checks above
+        uint256 numDice = cost / cachedPrice;
+
+        require(numDice > 0, "!dice");
 
         address(vaultToken).safeTransferFrom(msg.sender, address(this), shares);
 
@@ -259,11 +272,6 @@ contract AldersonDiceGameV1 is Ownable {
 
     // TODO: thank you for your sponsorship
     // function withdrawSponsership()
-
-    function price() public view returns (uint256) {
-        // TODO: what should price be?
-        return 10 * prizeToken.decimals();
-    }
 
     // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme
 }
