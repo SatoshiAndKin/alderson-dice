@@ -23,7 +23,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     // we could just look-up odds in a table, but i think dice with pips are a lot more fun
     // TODO: be more consistent about "color" vs "type" vs "name"
     struct DieType {
-        uint32[6] pips;
+        uint32[NUM_SIDES] pips;
         string name;
         string symbol;
     }
