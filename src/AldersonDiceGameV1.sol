@@ -144,15 +144,11 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
-    function skirmish(LibPRNG.PRNG memory seed, uint256 dice0, uint256 dice1, uint8 rounds)
+    function skirmish(LibPRNG.PRNG memory seed, uint256 color0, uint256 color1, uint8 rounds)
         public
         view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
-        // if we put the color logic in this contract, then we can use most any compatible NFT
-        uint256 color0 = color(dice0);
-        uint256 color1 = color(dice1);
-
         // TODO: do we want to copy into memory here? i think so
         DieType memory die0 = diceTypes[color0];
         DieType memory die1 = diceTypes[color1];
@@ -183,11 +179,12 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     {
         require(diceBag0.length == diceBag1.length, "Dice bags must be the same length");
 
-        for (uint8 i = 0; i < 10; i++) {
-            uint256 dice0 = diceBag0[i];
-            uint256 dice1 = diceBag1[i];
+        for (uint8 i = 0; i < NUM_ROUNDS; i++) {
+            uint256 color0 = color(diceBag0[i]);
+            uint256 color1 = color(diceBag1[i]);
 
-            (uint8 w0, uint8 w1,) = skirmish(seed, dice0, dice1, rounds);
+            // TODO: maybe we do want the diceId passed to this so we can use it for tie breaking or something
+            (uint8 w0, uint8 w1,) = skirmish(seed, color0, color1, rounds);
 
             if (w0 > w1) {
                 wins0++;
@@ -233,14 +230,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         tokenIds = new uint256[](NUM_COLORS);
         amounts = new uint256[](NUM_COLORS);
 
-
         // Generate random values until the sum reaches or exceeds x
         // TODO: don't cap at NUM_COLORS. have multiple tiers of dice
-        for (uint256 i = 0; i < NUM_COLORS; i++) {
-            if (sum >= numDice) {
-                break;
-            }
-
+        for (uint256 i = 0; i < NUM_COLORS - 1; i++) {
             // we increment by 1 so that "0" can be used a null value in mappings and lists (like the favorites list of a new account)
             tokenIds[i] = i + 1;
 
@@ -248,6 +240,10 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
             amounts[i] = prng.uniform(remaining);
             sum += amounts[i];
+
+            if (sum >= numDice) {
+                break;
+            }
         }
 
         // Assign the remaining value to the last element

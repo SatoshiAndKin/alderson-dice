@@ -42,7 +42,6 @@ contract AldersonDiceGameV1Test is Test {
     }
 
     function test_buySomeDice() public {
-
         uint256 sum = 0;
 
         uint256 numColors = game.NUM_COLORS();
@@ -66,8 +65,8 @@ contract AldersonDiceGameV1Test is Test {
     }
 
     function test_twoDiceSkirmish() public view {
-        uint16 color0 = game.color(0);
-        uint16 color1 = game.color(1);
+        uint16 color0 = 1;
+        uint16 color1 = 4;
 
         console.log("color0", color0);
         console.log("color1", color1);
@@ -78,8 +77,10 @@ contract AldersonDiceGameV1Test is Test {
         LibPRNG.PRNG memory prng;
 
         // color1 (olive) is stronger than color0 (red)
+        // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
         // TODO: what are the odds that they lose?
-        (uint8 wins0, uint8 wins1, uint8 ties) = game.skirmish(prng, 0, 1, 10);
+        // TODO: better to do do a bunch of games of 10 rounds?
+        (uint8 wins0, uint8 wins1, uint8 ties) = game.skirmish(prng, color0, color1, type(uint8).max);
 
         console.log("wins0", wins0);
         console.log("wins1", wins1);
