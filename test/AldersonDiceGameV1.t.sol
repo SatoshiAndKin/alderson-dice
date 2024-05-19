@@ -2,9 +2,11 @@
 pragma solidity ^0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
-import {AldersonDiceNFT, AldersonDiceGameV1, ERC20, ERC4626} from "../src/AldersonDiceGameV1.sol";
+import {AldersonDiceNFT, AldersonDiceGameV1, ERC20, ERC4626, LibPRNG} from "../src/AldersonDiceGameV1.sol";
 
 contract AldersonDiceGameV1Test is Test {
+    using LibPRNG for LibPRNG.PRNG;
+
     AldersonDiceNFT public nft;
     AldersonDiceGameV1 public game;
 
@@ -29,28 +31,55 @@ contract AldersonDiceGameV1Test is Test {
 
         prizeToken = ERC20(prizeVault.asset());
 
-        nft = new AldersonDiceNFT(owner, 1 days);
+        nft = new AldersonDiceNFT(owner);
 
-        game = new AldersonDiceGameV1(owner, devFund, nft, prizeVault, 0);
+        game = new AldersonDiceGameV1(owner, devFund, nft, prizeVault, 0, 1 weeks, "ipfs://alderson-dice.eth/dice/");
+
+        // TODO: how should we multiple by decimals here? math.pow?
+        // game.setPrice(1);     
 
         nft.upgrade(address(game));
+    }
+
+    function test_buySomeDice() public {
+
+        uint256 sum = 0;
+
+        uint256 numColors = game.NUM_COLORS();
+
+        // dice indexes start at 1! need `<=`
+        for (uint256 i = 0; i <= numColors; i++) {
+            sum += nft.balanceOf(owner, i);
+        }
+
+        require(sum == 0, "unexpected balance");
+
+        game.buyNumDice(owner, 10);
+
+        // dice indexes start at 1! need `<=`
+        for (uint256 i = 0; i <= numColors; i++) {
+            sum += nft.balanceOf(owner, i);
+        }
+
+        // TODO: is there a helper for comparisons like this?
+        require(sum == 10, "unexpected balance");
     }
 
     function test_twoDiceSkirmish() public view {
         uint16 color0 = game.color(0);
         uint16 color1 = game.color(1);
-        
+
         console.log("color0", color0);
         console.log("color1", color1);
 
         require(color0 == 1);
         require(color1 == 4);
 
-        bytes32 seed = bytes32(0);
+        LibPRNG.PRNG memory prng;
 
         // color1 (olive) is stronger than color0 (red)
         // TODO: what are the odds that they lose?
-        (uint8 wins0, uint8 wins1, uint8 ties) = game.skirmish(seed, 0, 1, 10);
+        (uint8 wins0, uint8 wins1, uint8 ties) = game.skirmish(prng, 0, 1, 10);
 
         console.log("wins0", wins0);
         console.log("wins1", wins1);
@@ -60,29 +89,37 @@ contract AldersonDiceGameV1Test is Test {
         require(ties < wins1);
     }
 
-    function testRelease() public {
-        require(game.owner() == owner);
-        require(game.devFund() == devFund);
+    // // TODO: v1 doesn't need the release function. there will definitely be an upgrade before it is ready
+    // function testRelease() public {
+    //     require(game.owner() == owner);
+    //     require(game.devFund() == devFund);
 
-        // TODO: allow setting the price one last time?
-        game.release();
+    //     // TODO: allow setting the price one last time?
+    //     game.release();
 
-        require(game.owner() == address(0));
-        require(game.devFund() == devFund);
-    }
+    //     require(game.owner() == address(0));
+    //     require(game.devFund() == devFund);
+    // }
 
-    function testFuzz_mint(address to, uint256 amount) public {
-        vm.assume(amount > 0);
-        vm.assume(amount < 100);
+    function testFuzz_prankedNftMint(address to, uint256 id) public {
+        vm.assume(to != address(0));
+
+        uint256 amount = 10;
+
+        vm.assume(id > 0);
+        vm.assume(id < 6);
+
+        uint256[] memory mintIds = new uint256[](1);
+        uint256[] memory mintAmounts = new uint256[](1);
+
+        mintIds[0] = id;
+        mintAmounts[0] = amount;
 
         vm.prank(address(game));
-        nft.mint(to, amount);
+        nft.mint(to, mintIds, mintAmounts);
 
-        require (nft.nextTokenId() == amount);
-
-        // TODO: loop to check all the balances!
-        require (nft.balanceOf(to, 0) == 1);
-        require (nft.balanceOf(to, amount - 1) == 1);
-        require (nft.balanceOf(to, amount) == 0);
+        require(nft.balanceOf(to, 0) == 0, "zero balance isn't empty");
+        require(nft.balanceOf(to, id) == amount, "unexpected balance");
+        require(nft.balanceOf(to, id + 1) == 0, "other balance isn't empty");
     }
 }

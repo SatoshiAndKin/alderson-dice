@@ -1,72 +1,115 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.25;
 
-import {ERC4626, ERC20} from "@solady/tokens/ERC4626.sol";
-import {ERC6909} from "./abstract/ERC6909.sol";
+import {ERC20} from "@solady/tokens/ERC20.sol";
+import {ERC6909} from "@solady/tokens/ERC6909.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
+import {LibBitmap} from "@solady/utils/LibBitmap.sol";
+import {LibPRNG} from "@solady/utils/LibPRNG.sol";
 
+// TODO: we need to write an
+
+interface IGameLogic {
+    function tokenURI(uint256 id) external view returns (string memory);
+    function name(uint256 id) external view returns (string memory);
+    function symbol(uint256 id) external view returns (string memory);
+}
 
 contract AldersonDiceNFT is ERC6909 {
+    using LibPRNG for LibPRNG.PRNG;
 
     event Upgrade(address newGameLogic);
 
-    address public gameLogic;
-    uint256 public nextTokenId = 0;
+    IGameLogic public gameLogic;
 
-    mapping(uint256 id => uint256 amount) public cooldowns;
+    mapping(address owner => mapping (uint256 id => uint256 amount)) locked;
 
-    string public constant name = "AldersonDice";
-    string public constant symbol = "AD";
-
-    uint256 public immutable maxCooldownDelta;
-
-    // TODO: baseUri?
-
-    constructor(address _gameLogic, uint256 _maxCooldownDelta) {
-        gameLogic = _gameLogic;
-        maxCooldownDelta = _maxCooldownDelta;
+    constructor(address _gameLogic) {
+        gameLogic = IGameLogic(_gameLogic);
     }
 
-    function setCooldown(uint256 id, uint256 cooldown) external {
-        require(msg.sender == gameLogic, "!auth");
+    modifier onlyGameLogic() {
+        require(msg.sender == address(gameLogic), "!auth");
+        _;
+    }
 
-        uint256 maxCooldown = block.timestamp + maxCooldownDelta;
+    function name(uint256 id) public view override returns (string memory) {
+        return gameLogic.name(id);
+    }
 
-        if (cooldown > maxCooldown) {
-            cooldown = maxCooldown;
+    function symbol(uint256 id) public view override returns (string memory) {
+        return gameLogic.symbol(id);
+    }
+
+    function tokenURI(uint256 id) public view override returns (string memory) {
+        return gameLogic.tokenURI(id);
+    }
+
+    function _beforeTokenTransfer(address from, address /*to*/, uint256 id, uint256 amount)
+        internal
+        view
+        override
+    {
+        if (from == address(0)) {
+            // mints don't need the lock check. thats just for user transfers
+            return;
         }
 
-        cooldowns[id] = cooldown;
+        uint256 balance = balanceOf(from, id);
+        uint256 needed = locked[from][id] + amount;
+
+        require(needed <= balance, "lock");
     }
 
-    function _preTransferCheck(address sender, uint256 tokenId, uint256 amount) internal override {
-        require(cooldowns[tokenId] <= block.timestamp, "cooldown");
+    function _afterTokenTransfer(address, /*from*/ address, /*to*/ uint256 id, uint256 /*amount*/ ) internal pure override {
+        // i don't think we need any checks here
     }
 
     // TODO: two-phase commit
-    function upgrade(address _newGameLogic) external {
-        require(msg.sender == gameLogic, "!auth");
+    function upgrade(address _newGameLogic) external onlyGameLogic {
+        gameLogic = IGameLogic(_newGameLogic);
 
         emit Upgrade(_newGameLogic);
-
-        gameLogic = _newGameLogic;
     }
 
-    function mint(address receiver, uint256 amount) public {
-        require(msg.sender == gameLogic, "!auth");
+    function mint(address receiver, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
+        uint256 length = tokenIds.length;
 
-        for (uint256 i = 0; i < amount; i++) {
-            // every dice is 1:1? then why do we need to keep track of the amount? seems like a waste of gas. maybe 6909 isn't the right standard
-            _mint(receiver, nextTokenId++, 1);
+        require(length == amounts.length, "length");
+
+        for (uint256 i = 0; i < length; i++) {
+            _mint(receiver, tokenIds[i], amounts[i]);
         }
     }
 
     // this seems dangerous
-    function burn(address owner, uint256[] calldata tokenIds) public {
-        require(msg.sender == gameLogic, "!auth");
+    function burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
+        uint256 length = tokenIds.length;
 
-        for (uint256 i = 0; i < tokenIds.length; i++) {
-            _burn(owner, tokenIds[i], 1);
+        require(length == amounts.length, "length");
+
+        for (uint256 i = 0; i < length; i++) {
+            _burn(owner, tokenIds[i], amounts[i]);
+        }
+    }
+
+    function lock(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
+        uint256 length = tokenIds.length;
+
+        require(length == amounts.length, "length");
+
+        for (uint256 i = 0; i < length; i++) {
+           locked[owner][tokenIds[i]] += amounts[i];
+        }
+    }
+
+    function unlock(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
+        uint256 length = tokenIds.length;
+
+        require(length == amounts.length, "length");
+
+        for (uint256 i = 0; i < length; i++) {
+           locked[owner][tokenIds[i]] -= amounts[i];
         }
     }
 }

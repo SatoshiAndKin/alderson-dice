@@ -1,47 +1,73 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.25;
 
-import {ERC4626, ERC20} from "@solady/tokens/ERC4626.sol";
-import {ERC6909} from "./abstract/ERC6909.sol";
+import {ERC4626} from "@solady/tokens/ERC4626.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
-import {AldersonDiceNFT} from "./AldersonDiceNFT.sol";
+import {IGameLogic, AldersonDiceNFT, ERC20} from "./AldersonDiceNFT.sol";
+import {LibPRNG} from "@solady/utils/LibPRNG.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 
-contract AldersonDiceGameV1 is Ownable {
+contract AldersonDiceGameV1 is IGameLogic, Ownable {
     using SafeTransferLib for address;
+    using LibPRNG for LibPRNG.PRNG;
 
+    uint8 public constant NUM_COLORS = 5;
+    uint8 public constant NUM_SIDES = 6;
+    uint8 public constant NUM_ROUNDS = 10;
+    uint8 public constant NUM_FAVORITES = 10;
+
+    /// @notice after depositing funds, you have to wait this long before withdrawing. this is so that there is time for at least some interest to accrue
+    uint256 public immutable withdrawalCooldown;
+    string internal tokenURIPrefix;
+
+    // we could just look-up odds in a table, but i think dice with pips are a lot more fun
+    // TODO: be more consistent about "color" vs "type" vs "name"
     struct DieType {
         uint32[6] pips;
-        string color;
+        string name;
+        string symbol;
     }
 
+    // TODO: gas golf this
     struct Player {
-        uint256 wins;
-        uint256 ties;
-        uint256 losses;
+        uint256 earliestWithdrawal;
+        // // TODO: how should we do this? we don't need it yet but a later version will
+        // uint64 wins;
+        // uint64 losses;
+        // uint64 ties;
 
         // TODO: the dice bags should be nfts instead of a player only having one
         // TODO: this is too simple. think more about this. probably have "tournament" contracts with blinding and other cool things
         // TODO: let people use a contract to pick from the dice bag?
-        bool ownsDiceBag;
-        uint256[10] diceBag;
+        uint256[NUM_FAVORITES] favoriteDice;
     }
 
-    event FirstDiceBag(address player, uint256[10] diceBag);
-    // event ScoreCard(string x);
+    // // TODO: do we need to track these?
+    // uint256 minted;
+    // uint256 burned;
 
-    uint8 public constant NUM_COLORS = 5;
-    uint8 public constant NUM_SIDES = 6;
+    event FavoriteDice(address player, uint256[10] dice);
+    // event ScoreCard(string x);
+    event DevFundDeposit(address purchaser, address devFund, uint256 amount);
+
     AldersonDiceNFT public immutable nft;
+
+    // TODO: function to set this
+    uint256[NUM_FAVORITES] public currentDrawing;
 
     /// @notice the source of prizes for this game
     ERC4626 public immutable vaultToken;
-    
+
     /// @notice this is looked up during construction. it is the vault token's asset
     ERC20 public immutable prizeToken;
 
+    /// @notice the amount of the prize token that can be withdrawn
+    /// any interest earned on this token while
+    mapping(address who => uint256 withdrawable) public sponsorships;
+
     address public devFund;
     uint256 public price;
+    address public prizeFund;
 
     // TODO: store in an immutable instead?
     DieType[NUM_COLORS] public diceTypes;
@@ -55,26 +81,36 @@ contract AldersonDiceGameV1 is Ownable {
 
     mapping(address => Player) public players;
 
-    mapping(uint256 => DieType) public scoreCard;
-
-    constructor(address _owner, address _devFund, AldersonDiceNFT _nft, ERC4626 _vaultToken, uint256 _initialPrice) Ownable() {
+    constructor(
+        address _owner,
+        address _devFund,
+        AldersonDiceNFT _nft,
+        ERC4626 _vaultToken,
+        uint256 _initialPrice,
+        uint256 _withdrawalCooldown,
+        string memory _tokenURIPrefix
+    ) Ownable() {
         _initializeOwner(_owner);
 
         devFund = _devFund;
         nft = _nft;
         vaultToken = _vaultToken;
         price = _initialPrice;
+        withdrawalCooldown = _withdrawalCooldown;
+        tokenURIPrefix = _tokenURIPrefix;
 
         prizeToken = ERC20(vaultToken.asset());
 
         ERC20(prizeToken).approve(address(_vaultToken), type(uint256).max);
 
         // grime dice
-        diceTypes[0] = DieType([uint32(4), 4, 4, 4, 4, 9], "red");
-        diceTypes[1] = DieType([uint32(3), 3, 3, 3, 8, 8], "yellow");
-        diceTypes[2] = DieType([uint32(2), 2, 2, 7, 7, 7], "blue");
-        diceTypes[3] = DieType([uint32(1), 1, 6, 6, 6, 6], "magenta");
-        diceTypes[4] = DieType([uint32(0), 5, 5, 5, 5, 5], "olive");
+        // TODO: put this into calldata instead of hard coding it here
+        // TODO: what about a "re-roll" face? -1?
+        diceTypes[0] = DieType([uint32(4), 4, 4, 4, 4, 9], "Red", unicode"🟥");
+        diceTypes[1] = DieType([uint32(3), 3, 3, 3, 8, 8], "Yellow", unicode"⭐️");
+        diceTypes[2] = DieType([uint32(2), 2, 2, 7, 7, 7], "Blue", unicode"🔷");
+        diceTypes[3] = DieType([uint32(1), 1, 6, 6, 6, 6], "Magenta", unicode"💜");
+        diceTypes[4] = DieType([uint32(0), 5, 5, 5, 5, 5], "Olive", unicode"🫒");
     }
 
     function resetApproval() public {
@@ -83,21 +119,37 @@ contract AldersonDiceGameV1 is Ownable {
 
     // TODO: do we want to somehow blind this until after the dice is buyDiceed?
     // this is here so that the game logic can upgrade but colors won't change
-    function color(uint256 diceId) view public returns (uint8) {
+    function color(uint256 diceId) public view returns (uint8) {
         return uint8(uint256(keccak256(abi.encodePacked(address(nft), diceId))) % NUM_COLORS);
+    }
+
+    function tokenURI(uint256 id) public view returns (string memory) {
+        return string(abi.encodePacked(tokenURIPrefix, id));
+    }
+
+    function name(uint256 id) external view returns (string memory) {
+        DieType memory die = diceTypes[color(id)];
+
+        return string(abi.encodePacked(die.name, " Alderson Die"));
+    }
+
+    function symbol(uint256 id) public view virtual returns (string memory) {
+        DieType memory die = diceTypes[color(id)];
+
+        return string(abi.encodePacked("AD", die.symbol));
     }
 
     function upgrade(address _newGameLogic) public onlyOwner {
         nft.upgrade(_newGameLogic);
     }
 
-    function release() public onlyOwner {
-        _setOwner(address(0));
-    }
-
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
-    function skirmish(bytes32 seed, uint256 dice0, uint256 dice1, uint8 rounds) public view returns (uint8 wins0, uint8 wins1, uint8 ties) {
-        // if we put the color logic in this contract, then we can use most any compatible NFT 
+    function skirmish(LibPRNG.PRNG memory seed, uint256 dice0, uint256 dice1, uint8 rounds)
+        public
+        view
+        returns (uint8 wins0, uint8 wins1, uint8 ties)
+    {
+        // if we put the color logic in this contract, then we can use most any compatible NFT
         uint256 color0 = color(dice0);
         uint256 color1 = color(dice1);
 
@@ -106,8 +158,8 @@ contract AldersonDiceGameV1 is Ownable {
         DieType memory die1 = diceTypes[color1];
 
         for (uint16 round = 0; round < rounds; round++) {
-            uint8 side0 = rollDie(seed, dice0, round);
-            uint8 side1 = rollDie(seed, dice1, round);
+            uint8 side0 = rollDie(seed);
+            uint8 side1 = rollDie(seed);
 
             uint32 roll0 = die0.pips[side0];
             uint32 roll1 = die1.pips[side1];
@@ -120,18 +172,22 @@ contract AldersonDiceGameV1 is Ownable {
                 ties++;
             }
         }
-            
+
         // emit ScoreCard(scoreCard);
     }
 
-    function skirmish(bytes32 seed, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 rounds) public view returns (uint8 wins0, uint8 wins1, uint8 ties) {
+    function skirmish(LibPRNG.PRNG memory seed, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 rounds)
+        public
+        view
+        returns (uint8 wins0, uint8 wins1, uint8 ties)
+    {
         require(diceBag0.length == diceBag1.length, "Dice bags must be the same length");
 
         for (uint8 i = 0; i < 10; i++) {
             uint256 dice0 = diceBag0[i];
             uint256 dice1 = diceBag1[i];
 
-            (uint8 w0, uint8 w1, ) = skirmish(seed, dice0, dice1, rounds);
+            (uint8 w0, uint8 w1,) = skirmish(seed, dice0, dice1, rounds);
 
             if (w0 > w1) {
                 wins0++;
@@ -145,72 +201,113 @@ contract AldersonDiceGameV1 is Ownable {
         // emit ScoreCard(scoreCard);
     }
 
-    function skirmish(bytes32 seed, address player0, address player1, uint8 rounds) public view returns (uint8 wins0, uint8 wins1, uint8 ties) {
-        uint256[] memory diceBag0; 
+    function skirmish(LibPRNG.PRNG memory prng, address player0, address player1, uint8 rounds)
+        public
+        view
+        returns (uint8 wins0, uint8 wins1, uint8 ties)
+    {
+        uint256[] memory diceBag0;
         uint256[] memory diceBag1;
 
         for (uint8 i = 0; i < 10; i++) {
-            diceBag0[i] = players[player0].diceBag[i];
-            diceBag1[i] = players[player1].diceBag[i];
+            diceBag0[i] = players[player0].favoriteDice[i];
+            diceBag1[i] = players[player1].favoriteDice[i];
         }
 
-        (wins0, wins1, ties) = skirmish(seed, diceBag0, diceBag1, rounds);
+        (wins0, wins1, ties) = skirmish(prng, diceBag0, diceBag1, rounds);
     }
 
     /// @notice returns the faceId of a given die being rolled
     /// @dev TODO: think a lot more about this
-    function rollDie(bytes32 seed, uint256 dieId, uint16 round) public pure returns (uint8) {
-        return uint8(uint256(keccak256(abi.encodePacked(seed, dieId, round))) % 6);
+    function rollDie(LibPRNG.PRNG memory prng) public pure returns (uint8 faceId) {
+        faceId = uint8(prng.next() % NUM_SIDES);
     }
 
-    // TODO: i don't like the name "buyDice"
-    function _buyDice(address receiver, uint256 numDice, uint256 cost, uint256 shares) internal {
-        Player storage player = players[receiver];
+    function _randomAmounts(LibPRNG.PRNG memory prng, uint256 numDice)
+        internal
+        pure
+        returns (uint256[] memory tokenIds, uint256[] memory amounts)
+    {
+        uint256 sum = 0;
 
-        require(player.ownsDiceBag, "!bag");
+        tokenIds = new uint256[](NUM_COLORS);
+        amounts = new uint256[](NUM_COLORS);
 
-        // because of possible rounding errors. keep both "cost" and "half_cost" around
-        // TODO: how much should we actually take? every other game takes 100%, so 50% seems like a good start to me
-        uint256 half_shares = shares / 2;
 
-        // TODO: keep track of share ownership here! some goes to the receiver, some goes to the dev fund
-
-        nft.mint(receiver, numDice);
-    }
-
-    function buyDiceBag(address receiver) public {
-        buyNumDice(receiver, 10);
-
-        Player storage player = players[receiver];
-
-        // if this is the first bag, set up the player
-        if (!player.ownsDiceBag) {
-            player.ownsDiceBag = true;
-
-            for (uint8 i = 0; i < 10; i++) {
-                player.diceBag[i] = nft.nextTokenId() - 1 - i;
+        // Generate random values until the sum reaches or exceeds x
+        // TODO: don't cap at NUM_COLORS. have multiple tiers of dice
+        for (uint256 i = 0; i < NUM_COLORS; i++) {
+            if (sum >= numDice) {
+                break;
             }
 
-            emit FirstDiceBag(receiver, player.diceBag);
+            // we increment by 1 so that "0" can be used a null value in mappings and lists (like the favorites list of a new account)
+            tokenIds[i] = i + 1;
+
+            uint256 remaining = numDice - sum;
+
+            amounts[i] = prng.uniform(remaining);
+            sum += amounts[i];
         }
+
+        // Assign the remaining value to the last element
+        amounts[NUM_COLORS - 1] = numDice - sum;
+    }
+
+    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 cost, uint256 /*shares*/)
+        internal
+    {
+        Player storage player = players[receiver];
+
+        player.earliestWithdrawal = block.timestamp + withdrawalCooldown;
+
+        // player.minted += numDice;
+
+        // half the shares are held for the player. dice can be burned to recover half the cost
+        // uint256 half_shares = shares / 2;
+        uint256 half_cost = cost / 2;
+
+        uint256 devFundAmount = cost - half_cost;
+
+        // the other half of the shares (with fixes for rounding errors) are given to the devFund
+        // we keep them in the game to boost interest, but they can be withdrawn by the devFund at any time
+        // TODO: wait. if we track shares on this, then they don't
+        sponsorships[devFund] += devFundAmount;
+
+        // TODO: need to keep track of shares and cost here. that way sweeping the prize can have some
+
+        emit DevFundDeposit(receiver, devFund, devFundAmount);
+
+        (uint256[] memory diceIds, uint256[] memory diceAmounts) = _randomAmounts(prng, numDice);
+
+        nft.mint(receiver, diceIds, diceAmounts);
     }
 
     // TODO: how should we allow people to set their dice bags? let players approve another contract to do it. maybe just overload the operator on the NFT?
     function setDiceBag(address _player, uint256[10] calldata dice) public {
-        require(players[_player].ownsDiceBag, "!bag");
-
         require(_player == msg.sender || nft.isOperator(_player, msg.sender), "!auth");
-   
+
         Player storage player = players[_player];
 
-        for (uint8 i = 0; i < 10; i++) {
-            require(nft.balanceOf(_player, dice[i]) > 0, "!bal");
+        // TODO: how can we make this support 150 dice types? maybe thats just too many to aim for in v1
+        uint256[] memory deduped = new uint256[](NUM_COLORS);
 
-            player.diceBag[i] = dice[i];
+        for (uint8 i = 0; i < 10; i++) {
+            player.favoriteDice[i] = dice[i];
+            ++deduped[dice[i]];
         }
+
+        for (uint8 i = 0; i < 10; i++) {
+            require(nft.balanceOf(_player, dice[i]) > deduped[dice[i]], "!bal");
+        }
+
+        emit FavoriteDice(_player, player.favoriteDice);
     }
 
+    // TODO: check dice bag function
+
     // TODO: do something cool with a dutch auction?
+    // TODO: support multiple vaults
     function setPrice(uint256 _price) public onlyOwner {
         price = _price;
     }
@@ -221,28 +318,45 @@ contract AldersonDiceGameV1 is Ownable {
         // no rounding errors are possible with this one
         uint256 cost = numDice * price;
 
-        address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
+        // TODO: this check is unnecessary except in dev
+        uint256 shares;
+        if (cost > 0) {
+            address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
 
-        uint256 shares = vaultToken.deposit(cost, address(this));
+            shares = vaultToken.deposit(cost, address(this));
+        } else {
+            shares = 0;
+        }
 
-        _buyDice(receiver, numDice, cost, shares);
+        LibPRNG.PRNG memory prng = insecurePrng();
+
+        _buyDice(prng, receiver, numDice, cost, shares);
     }
 
     function buyDiceWithTotalCost(address receiver, uint256 cost) public {
         uint256 cachedPrice = price;
 
-        uint256 numDice = cost / price;
+        uint256 numDice = cost / cachedPrice;
 
         require(numDice > 0, "!dice");
 
         // handle rounding errors. don't take excess
-        cost = numDice * price;
+        cost = numDice * cachedPrice;
 
-        address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
+        // TODO: this check is unnecessary except in dev
+        uint256 shares;
+        if (cost > 0) {
 
-        uint256 shares = vaultToken.deposit(cost, address(this));
+            address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
 
-        _buyDice(receiver, numDice, cost, shares);
+            shares = vaultToken.deposit(cost, address(this));
+        } else {
+            shares = 0;
+        }
+
+        LibPRNG.PRNG memory prng = insecurePrng();
+
+        _buyDice(prng, receiver, numDice, cost, shares);
     }
 
     /// @notice use this if you already have vault tokens
@@ -264,7 +378,14 @@ contract AldersonDiceGameV1 is Ownable {
 
         address(vaultToken).safeTransferFrom(msg.sender, address(this), shares);
 
-        _buyDice(receiver, numDice, cost, shares);
+        LibPRNG.PRNG memory prng = insecurePrng();
+
+        _buyDice(prng, receiver, numDice, cost, shares);
+    }
+
+    // TODO: THIS IS PREDICTABLE! KEEP THINKING ABOUT THIS
+    function insecurePrng() public view returns (LibPRNG.PRNG memory x) {
+        x.seed(block.number);
     }
 
     // TODO: deposit tokens without mining any dice
@@ -274,4 +395,9 @@ contract AldersonDiceGameV1 is Ownable {
     // function withdrawSponsership()
 
     // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme
+
+    // // a future contract will want this function. but we don't want it in V1
+    // function release() public onlyOwner {
+    //     _setOwner(address(0));
+    // }
 }
