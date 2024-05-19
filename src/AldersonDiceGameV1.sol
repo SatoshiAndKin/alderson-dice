@@ -46,7 +46,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     // uint256 minted;
     // uint256 burned;
 
-    event FavoriteDice(address player, uint256[10] dice);
+    event FavoriteDice(address player, uint256[NUM_FAVORITES] dice);
     // event ScoreCard(string x);
     event DevFundDeposit(address purchaser, address devFund, uint256 amount);
 
@@ -206,7 +206,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         uint256[] memory diceBag0;
         uint256[] memory diceBag1;
 
-        for (uint8 i = 0; i < 10; i++) {
+        for (uint8 i = 0; i < NUM_FAVORITES; i++) {
             diceBag0[i] = players[player0].favoriteDice[i];
             diceBag1[i] = players[player1].favoriteDice[i];
         }
@@ -280,7 +280,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     // TODO: how should we allow people to set their dice bags? let players approve another contract to do it. maybe just overload the operator on the NFT?
-    function setDiceBag(address _player, uint256[10] calldata dice) public {
+    function setDiceBag(address _player, uint256[NUM_FAVORITES] calldata dice) public {
         require(_player == msg.sender || nft.isOperator(_player, msg.sender), "!auth");
 
         Player storage player = players[_player];
@@ -288,12 +288,12 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // TODO: how can we make this support 150 dice types? maybe thats just too many to aim for in v1
         uint256[] memory deduped = new uint256[](NUM_COLORS);
 
-        for (uint8 i = 0; i < 10; i++) {
+        for (uint8 i = 0; i < NUM_FAVORITES; i++) {
             player.favoriteDice[i] = dice[i];
             ++deduped[dice[i]];
         }
 
-        for (uint8 i = 0; i < 10; i++) {
+        for (uint8 i = 0; i < NUM_FAVORITES; i++) {
             require(nft.balanceOf(_player, dice[i]) > deduped[dice[i]], "!bal");
         }
 
