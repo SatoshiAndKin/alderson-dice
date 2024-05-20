@@ -6,6 +6,7 @@ import {Ownable} from "@solady/auth/Ownable.sol";
 import {IGameLogic, AldersonDiceNFT, ERC20} from "./AldersonDiceNFT.sol";
 import {LibPRNG} from "@solady/utils/LibPRNG.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
+import {FixedPointMathLib} from "@solady/utils/FixedPointMathLib.sol";
 
 // TODO: use a delegatecall ugpradable contract here? that keeps approvals active and passes the state on. but sometimes passing the state on isn't what we want
 // maybe this should be a 4626 vault too? i think its easier for all the yield to go to the prizeFund and that can decide how to distribute things
@@ -51,7 +52,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     event FavoriteDice(address player, uint256[NUM_DICE_BAG] dice);
 
     // event ScoreCard(string x);
-    event Fees(address player, uint256 devFund, uint256 prizePool);
+    event Fees(address player, uint256 devFundAmount, uint256 prizePoolShares, uint256 totalDiceValue, uint256 totalSponsorships);
 
     // TODO: this should use console.log instead
     event Pips(uint256 color0, uint32[NUM_SIDES] pips0, uint256 color1, uint32[NUM_SIDES] pips1);
@@ -68,7 +69,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     /// User's can withdraw this token by burning their dice
     ERC20 public immutable prizeToken;
 
-    /// @notice the amount of the prize token that can be withdrawn
+    uint256 public totalDiceValue = 0;
+
+    /// @notice the amount of the prize token that can be withdrawn by sponsors (and the dev)
     /// any interest earned on this token while
     uint256 public totalSponsorships = 0;
     mapping(address who => uint256 withdrawable) public sponsorships;
@@ -77,6 +80,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     address public devFund;
     address public prizeFund;
     uint256 public immutable price;
+
+    /// @notice due to rounding of shares and the underlying token, this is an estimate. it should be close
     uint256 public immutable refundPrice;
 
     // TODO: store in an immutable instead?
@@ -311,7 +316,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.shuffle(tokenIds);
     }
 
-    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 cost, uint256 shares)
+    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 shares)
         internal
     {
         PlayerInfo storage playerInfo = players[receiver];
@@ -325,21 +330,20 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // the other half of the shares are split between the prize fund and the dev fund
         uint256 prizeFundShares = half_shares / 2;
 
-        // handle any rounding errors
-        uint256 prizeFundAmount = vaultToken.convertToAssets(prizeFundShares);
-
         uint256 devFundShares = shares - half_shares - prizeFundShares;
 
         // handle any rounding errors
-        uint256 devFundAmount = vaultToken.convertToAssets(devFundShares);
+        uint256 newDiceValue = vaultToken.previewRedeem(half_shares);
+        uint256 devFundAmount = vaultToken.previewRedeem(devFundShares);
 
-        // the other half of the shares (with fixes for rounding errors) are given to the devFund
+        // the other half of the shares' value (with fixes for rounding errors) are given to the devFund
         // we keep them in the game to boost interest, but they can be withdrawn by the devFund at any time
         sponsorships[devFund] += devFundAmount;
 
+        totalDiceValue += newDiceValue;
         totalSponsorships += devFundAmount;
 
-        emit Fees(receiver, devFundAmount, prizeFundAmount);
+        emit Fees(receiver, devFundAmount, prizeFundShares, totalDiceValue, totalSponsorships);
 
         (uint256[] memory diceIds, uint256[] memory diceAmounts) = _randomAmounts(prng, numDice);
 
@@ -380,8 +384,6 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         emit FavoriteDice(player, playerInfo.favoriteDice);
     }
 
-    // TODO: check dice bag function
-
     function buyNumDice(address receiver, uint256 numDice) public {
         require(numDice > 0, "!dice");
 
@@ -390,56 +392,18 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
 
+        // deposit takes the amount of assets
         uint256 shares = vaultToken.deposit(cost, address(this));
 
         LibPRNG.PRNG memory prng = blockPrng();
 
-        _buyDice(prng, receiver, numDice, cost, shares);
-    }
-
-    function buyDiceWithTotalCost(address receiver, uint256 cost) public {
-        uint256 numDice = cost / price;
-
-        require(numDice > 0, "!dice");
-
-        // handle rounding errors. don't take excess
-        cost = numDice * price;
-
-        address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
-
-        uint256 shares = vaultToken.deposit(cost, address(this));
-
-        LibPRNG.PRNG memory prng = blockPrng();
-
-        _buyDice(prng, receiver, numDice, cost, shares);
-    }
-
-    /// @notice use this if you already have vault tokens
-    function buyDiceWithVaultShares(address receiver, uint256 shares) public {
-        uint256 cost = vaultToken.convertToAssets(shares);
-
-        // handle rounding errors. don't take excess
-        cost -= (cost % price);
-
-        // update shares in case of excess
-        shares = vaultToken.convertToShares(cost);
-
-        // no rounding errors are possible thanks to checks above
-        uint256 numDice = cost / price;
-
-        require(numDice > 0, "!dice");
-
-        address(vaultToken).safeTransferFrom(msg.sender, address(this), shares);
-
-        LibPRNG.PRNG memory prng = blockPrng();
-
-        _buyDice(prng, receiver, numDice, cost, shares);
+        _buyDice(prng, receiver, numDice, shares);
     }
 
     /// @notice the player (or an operator) can burn their dice to recover half the cost
     function returnDice(address player, uint256[] calldata diceIds, uint256[] calldata diceAmounts)
         external
-        returns (uint256 refund)
+        returns (uint256 refundAssets)
     {
         require(player == msg.sender || nft.isOperator(player, msg.sender), "!auth");
 
@@ -447,12 +411,20 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         require(length == diceAmounts.length, "!len");
 
+        // get the supply before we burn
+        uint256 totalSupply = nft.totalSupply();
+
         uint256 burned = nft.burn(player, diceIds, diceAmounts);
 
-        // half was given to the devFund and prizeFund
-        refund = burned * refundPrice;
+        // half was given to the devFund and prizeFund. that introduces some rounding errors (and theres usually 1 wei rounding error too)
+        refundAssets = FixedPointMathLib.fullMulDiv(totalDiceValue, burned, totalSupply);
 
-        vaultToken.withdraw(refund, address(this), player);
+        // TODO: due to rounding errors, i don't think we actually have this much! i think we need 4696's math here to save us
+        // that, or we calculate how many shares 
+        // withdraw takes the amount of assets
+        vaultToken.withdraw(refundAssets, player, address(this));
+
+        totalDiceValue -= refundAssets;
 
         // playerInfo.burned += burned;
     }
@@ -463,16 +435,22 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.seed(block.number);
     }
 
-    // TODO: deposit tokens without mining any dice
+    /// @notice deposit tokens without mining any dice. all interest goes to the prize pool and dev fund.
     function sponsor(address account, uint256 amount) public {
         address(prizeToken).safeTransferFrom(msg.sender, address(this), amount);
 
+        // deposit takes the amount of assets
         uint256 shares = vaultToken.deposit(amount, address(this));
 
-        sponsorships[account] += vaultToken.convertToAssets(shares);
+        // corrent any rounding errors
+        // redeem takes the amount of shares
+        amount = vaultToken.previewRedeem(shares);
+
+        sponsorships[account] += amount;
+        totalSponsorships += amount;
     }
 
-    // TODO: thank you for your sponsorship
+    /// @notice thank you for your sponsorship
     function withdrawSponsership(uint256 amount) public {
         require(msg.sender == devFund, "!auth");
 
@@ -483,7 +461,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         sponsorships[msg.sender] -= amount;
         totalSponsorships -= amount;
 
-        vaultToken.withdraw(amount, address(this), devFund);
+        // withdraw takes the amount of assets
+        vaultToken.withdraw(amount, address(this), msg.sender);
     }
 
     // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme
@@ -496,19 +475,19 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     function prizeTokenAvailable() public view returns (uint256 available) {
         uint256 shares = prizeSharesAvailable();
 
-        return vaultToken.convertToAssets(shares);
+        // redeem takes the amount of shares
+        return vaultToken.previewRedeem(shares);
     }
 
-    function prizeSharesAvailable() public view returns (uint256 available) {
-        uint256 totalDiceValue = nft.totalSupply() * refundPrice;
-
-        uint256 totalDiceShares = vaultToken.convertToShares(totalDiceValue);
-
-        uint256 sponsorShares = vaultToken.convertToShares(totalSponsorships);
+    function prizeSharesAvailable() public view returns (uint256 prizeShares) {
+        // 2 preview calls to handle rounding errors?
+        // withdraw takes the amount of assets
+        uint256 totalDiceShares = vaultToken.previewWithdraw(totalDiceValue);
+        uint256 sponsorShares = vaultToken.previewWithdraw(totalSponsorships);
 
         uint256 ourShares = vaultToken.balanceOf(address(this));
 
-        return ourShares - totalDiceShares - sponsorShares;
+        prizeShares = ourShares - totalDiceShares - sponsorShares;
     }
 
     function recover(address token, address to, uint256 amount) public {

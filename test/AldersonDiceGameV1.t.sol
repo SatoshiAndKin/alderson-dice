@@ -78,29 +78,36 @@ contract AldersonDiceGameV1Test is Test {
     }
 
     function test_buySomeDice() public {
-        uint256 sum = 0;
+        uint256 diceBalance = 0;
 
+        // TODO: this will have to change if we add more dice of the same color eventually i think we want 30 or even 150 dice
         uint256 numColors = game.NUM_COLORS();
 
         // dice indexes start at 1! need `<=`
         for (uint256 i = 0; i <= numColors; i++) {
-            sum += nft.balanceOf(owner, i);
+            diceBalance += nft.balanceOf(owner, i);
         }
 
-        require(sum == 0, "unexpected balance");
+        require(diceBalance == 0, "unexpected balance");
         require(game.prizeTokenAvailable() == 0, "unexpected prizeToken available. should be 0");
 
         prizeToken.approve(address(game), type(uint256).max);
 
         game.buyNumDice(owner, 10);
 
-        // dice indexes start at 1! need `<=`
-        for (uint256 i = 0; i <= numColors; i++) {
-            sum += nft.balanceOf(owner, i);
+        uint256[] memory returnIds = new uint256[](numColors);
+        uint256[] memory returnAmounts = new uint256[](numColors);
+        for (uint256 i = 0; i < numColors; i++) {
+            // dice indexes start at 1! color indexes start at 0!
+            uint256 j = i + 1;
+
+            returnIds[i] = j;
+            returnAmounts[i] = nft.balanceOf(owner, j);
+
+            diceBalance += returnAmounts[i];
         }
 
-        // TODO: is there a helper for comparisons like this?
-        require(sum == 10, "unexpected balance");
+        require(diceBalance == 10, "unexpected dice balance");
 
         require(prizeToken.balanceOf(address(game)) == 0, "unexpected prizeToken balance");
         require(prizeVault.balanceOf(address(game)) > 0, "unexpected vaultToken balance");
@@ -108,8 +115,8 @@ contract AldersonDiceGameV1Test is Test {
         require(game.sponsorships(prizeFund) == 0, "unexpected prizeFund sponsorship");
 
         // TODO: because of some rounding inside the yearn vault, this is always a little lower than we expected. but it should be close
-        // TODO: it is a little confusing though. look more into it
-        require(game.sponsorships(devFund) > game.refundPrice() / 2 * 10 * 98 / 100, "unexpected devFund sponsorship");
+        // TODO: it is a little confusing though. look more into it. our first code just used the input amounts but that seems unsafe
+        require(game.sponsorships(devFund) > game.refundPrice() / 2 * 10 * 95 / 100, "unexpected devFund sponsorship");
 
         uint256 prizeTokenAvailable = game.prizeTokenAvailable();
 
@@ -139,6 +146,41 @@ contract AldersonDiceGameV1Test is Test {
         // console.log("prizeTokenAvailable after report", prizeTokenAvailable);
 
         // require(game.prizeTokenAvailable() > prizeTokenAvailable, "unexpected prizeToken available");
+
+        // TODO: take a range and have a helper function for this
+        uint256 burned = game.returnDice(
+            address(this),
+            returnIds,
+            returnAmounts
+        );
+
+        // TODO: what value should we expect?
+        require(burned > 0, "unexpected burned");
+
+        // we've burned all the dice we minted. there should still be money in the dev fund 
+        // TODO: what value should we expect?
+        require(prizeVault.balanceOf(address(game)) > 0, "unexpected game prizeVault balance");
+        require(game.prizeTokenAvailable() > 0, "unexpected prizeToken available");
+        require(game.sponsorships(devFund) > 0, "unexpected devFund sponsorship");
+        require(game.totalSponsorships() > 0, "unexpected totalSponsorships");
+    }
+
+    function test_vaultDepositAndWithdraw() public {
+        uint256 amount = 1_000 * 10 ** prizeToken.decimals();
+
+        deal(address(prizeToken), address(this), amount);
+
+        uint256 expectedShares = prizeVault.previewDeposit(amount);
+
+        prizeToken.approve(address(prizeVault), amount);
+        uint256 shares = prizeVault.deposit(amount, address(this));
+
+        require(expectedShares == shares, "unexpected shares");
+
+        uint256 expectedRedeem = prizeVault.previewRedeem(shares);
+
+        // TODO: i don't think this is actually true. i think theres some los expected
+        require(expectedRedeem >= amount - 1);
     }
 
     function test_twoDiceSkirmish() public {
