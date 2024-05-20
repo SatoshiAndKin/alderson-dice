@@ -498,5 +498,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         address(token).safeTransfer(to, amount);
     }
 
+    function sweepPrizeFund() public returns (uint256 shares) {
+        // TODO: limit how often this can happen?
+        shares = prizeSharesAvailable();
+
+        require(shares > 0, "!bal");
+
+        vaultToken.transfer(prizeFund, shares);
+    }
+
     // TODO: recover 6909 tokens
 }
