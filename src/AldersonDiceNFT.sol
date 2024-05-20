@@ -22,8 +22,6 @@ contract AldersonDiceNFT is ERC6909 {
 
     IGameLogic public gameLogic;
 
-    mapping(address owner => mapping (uint256 id => uint256 amount)) locked;
-
     constructor(address _gameLogic) {
         gameLogic = IGameLogic(_gameLogic);
     }
@@ -45,24 +43,20 @@ contract AldersonDiceNFT is ERC6909 {
         return gameLogic.tokenURI(id);
     }
 
-    function _beforeTokenTransfer(address from, address /*to*/, uint256 id, uint256 amount)
+    function _beforeTokenTransfer(address, /*from*/ address, /*to*/ uint256, /*id*/ uint256 /*amount*/ )
         internal
         view
         override
     {
-        if (from == address(0)) {
-            // mints don't need the lock check. thats just for user transfers
-            return;
-        }
-
-        uint256 balance = balanceOf(from, id);
-        uint256 needed = locked[from][id] + amount;
-
-        require(needed <= balance, "lock");
+        // i don't think we need any checks here. we could maybe call into the game logic, but that adds a lot of gas
     }
 
-    function _afterTokenTransfer(address, /*from*/ address, /*to*/ uint256 id, uint256 /*amount*/ ) internal pure override {
-        // i don't think we need any checks here
+    function _afterTokenTransfer(address, /*from*/ address, /*to*/ uint256, /*id*/ uint256 /*amount*/ )
+        internal
+        pure
+        override
+    {
+        // i don't think we need any checks here. we could maybe call into the game logic, but that adds a lot of gas
     }
 
     // TODO: two-phase commit
@@ -78,6 +72,7 @@ contract AldersonDiceNFT is ERC6909 {
         require(length == amounts.length, "length");
 
         for (uint256 i = 0; i < length; i++) {
+            // TODO: safety check to make sure we aren't minting anything into token 0
             _mint(receiver, tokenIds[i], amounts[i]);
         }
     }
@@ -90,26 +85,6 @@ contract AldersonDiceNFT is ERC6909 {
 
         for (uint256 i = 0; i < length; i++) {
             _burn(owner, tokenIds[i], amounts[i]);
-        }
-    }
-
-    function lock(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
-        uint256 length = tokenIds.length;
-
-        require(length == amounts.length, "length");
-
-        for (uint256 i = 0; i < length; i++) {
-           locked[owner][tokenIds[i]] += amounts[i];
-        }
-    }
-
-    function unlock(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
-        uint256 length = tokenIds.length;
-
-        require(length == amounts.length, "length");
-
-        for (uint256 i = 0; i < length; i++) {
-           locked[owner][tokenIds[i]] -= amounts[i];
         }
     }
 }
