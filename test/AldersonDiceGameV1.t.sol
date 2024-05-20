@@ -4,6 +4,35 @@ pragma solidity ^0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {AldersonDiceNFT, AldersonDiceGameV1, ERC20, ERC4626, LibPRNG} from "../src/AldersonDiceGameV1.sol";
 
+interface YearnVaultV3Strategy {
+    function report() external;
+    function keeper() external returns (address);
+}
+
+abstract contract YearnVaultV3 is ERC4626 {
+    enum Role {
+        ADD_STRATEGY_MANAGER, // Can add strategies to the vault.
+        REVOKE_STRATEGY_MANAGER, // Can remove strategies from the vault.
+        FORCE_REVOKE_MANAGER, // Can force remove a strategy causing a loss.
+        ACCOUNTANT_MANAGER, // Can set the accountant that assess fees.
+        QUEUE_MANAGER, // Can set the default withdrawal queue.
+        REPORTING_MANAGER, // Calls report for strategies.
+        DEBT_MANAGER, // Adds and removes debt from strategies.
+        MAX_DEBT_MANAGER, // Can set the max debt for a strategy.
+        DEPOSIT_LIMIT_MANAGER, // Sets deposit limit and module for the vault.
+        WITHDRAW_LIMIT_MANAGER, // Sets the withdraw limit module.
+        MINIMUM_IDLE_MANAGER, // Sets the minimum total idle the vault should keep.
+        PROFIT_UNLOCK_MANAGER, // Sets the profit_max_unlock_time.
+        DEBT_PURCHASER, // Can purchase bad debt from the vault.
+        EMERGENCY_MANAGER // Can shutdown vault in an emergency.
+
+    }
+
+    function default_queue(uint256 i) external view virtual returns (YearnVaultV3Strategy);
+    function get_default_queue() external view virtual returns (YearnVaultV3Strategy[] memory);
+    function process_report(YearnVaultV3Strategy strategy) external virtual;
+}
+
 contract AldersonDiceGameV1Test is Test {
     using LibPRNG for LibPRNG.PRNG;
 
@@ -12,8 +41,9 @@ contract AldersonDiceGameV1Test is Test {
 
     address owner;
     address devFund;
+    address prizeFund;
 
-    ERC4626 prizeVault;
+    YearnVaultV3 prizeVault;
     ERC20 prizeToken;
 
     uint256 arbitrumFork;
@@ -26,16 +56,23 @@ contract AldersonDiceGameV1Test is Test {
 
         owner = address(this);
         devFund = makeAddr("devFund");
+        prizeFund = makeAddr("prizeFund");
 
-        prizeVault = ERC4626(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
+        prizeVault = YearnVaultV3(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
 
         prizeToken = ERC20(prizeVault.asset());
+
+        uint256 price = 10 ** prizeToken.decimals();
+
+        // give enough tokens to buy 100 dice
+        deal(address(prizeToken), address(this), 1_000 * price);
 
         nft = new AldersonDiceNFT(owner);
 
         // changing price while we run breaks redeeming dice. but it makes tests a bit of a pain. i guess make a helper function for this?
         // how should we allow changing the tokenURI?
-        game = new AldersonDiceGameV1(owner, devFund, nft, prizeVault, 0, "ipfs://alderson-dice.eth/dice/");
+        game =
+            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, "ipfs://alderson-dice.eth/dice/");
 
         nft.upgrade(address(game));
     }
@@ -51,6 +88,9 @@ contract AldersonDiceGameV1Test is Test {
         }
 
         require(sum == 0, "unexpected balance");
+        require(game.prizeTokenAvailable() == 0, "unexpected prizeToken available. should be 0");
+
+        prizeToken.approve(address(game), type(uint256).max);
 
         game.buyNumDice(owner, 10);
 
@@ -61,6 +101,44 @@ contract AldersonDiceGameV1Test is Test {
 
         // TODO: is there a helper for comparisons like this?
         require(sum == 10, "unexpected balance");
+
+        require(prizeToken.balanceOf(address(game)) == 0, "unexpected prizeToken balance");
+        require(prizeVault.balanceOf(address(game)) > 0, "unexpected vaultToken balance");
+
+        require(game.sponsorships(prizeFund) == 0, "unexpected prizeFund sponsorship");
+
+        // TODO: because of some rounding inside the yearn vault, this is always a little lower than we expected. but it should be close
+        // TODO: it is a little confusing though. look more into it
+        require(game.sponsorships(devFund) > game.refundPrice() / 2 * 10 * 98 / 100, "unexpected devFund sponsorship");
+
+        uint256 prizeTokenAvailable = game.prizeTokenAvailable();
+
+        console.log("prizeTokenAvailable after mint", prizeTokenAvailable);
+
+        // TODO: what should the amount be?
+        require(prizeTokenAvailable > 0, "no prizeToken available. should be some from the dice purchase");
+
+        // fake a bunch of yield on the vault
+        // deal(address(prizeToken), address(prizeVault), 1_000_000 * 10 ** prizeToken.decimals());
+
+        // YearnVaultV3Strategy strategy0 = prizeVault.default_queue(0);
+
+        // address keeper = strategy0.keeper();
+
+        // vm.prank(keeper);
+        // strategy0.report();
+
+        // TODO: theres still more to call to get the vault to realize the donated tokens. i probably need to wait some time, too
+        // TODO: how do we get the reporting manager?
+        // address reporting_manager = prizeVault.roles(uint256(YearnVaultV3.Role.REPORTING_MANAGER));
+
+        // vm.prank(reporting_manager);
+        // prizeVault.process_report(strategy0);
+
+        // prizeTokenAvailable = game.prizeTokenAvailable();
+        // console.log("prizeTokenAvailable after report", prizeTokenAvailable);
+
+        // require(game.prizeTokenAvailable() > prizeTokenAvailable, "unexpected prizeToken available");
     }
 
     function test_twoDiceSkirmish() public {

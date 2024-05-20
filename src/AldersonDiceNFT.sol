@@ -22,6 +22,10 @@ contract AldersonDiceNFT is ERC6909 {
 
     IGameLogic public gameLogic;
 
+    // TODO: these increase the gas cost noticeably
+    uint256 public totalSupply;
+    mapping(uint256 => uint256) public tokenSupply;
+
     constructor(address _gameLogic) {
         gameLogic = IGameLogic(_gameLogic);
     }
@@ -66,15 +70,32 @@ contract AldersonDiceNFT is ERC6909 {
         emit Upgrade(_newGameLogic);
     }
 
-    function mint(address receiver, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
+    function mint(address receiver, uint256[] calldata tokenIds, uint256[] calldata amounts)
+        external
+        onlyGameLogic
+        returns (uint256 minted)
+    {
         uint256 length = tokenIds.length;
 
         require(length == amounts.length, "length");
 
+        uint256 id;
+        uint256 amount;
         for (uint256 i = 0; i < length; i++) {
-            // TODO: safety check to make sure we aren't minting anything into token 0
-            _mint(receiver, tokenIds[i], amounts[i]);
+            id = tokenIds[i];
+            amount = amounts[i];
+
+            if (id == 0 || amount == 0) {
+                continue;
+            }
+
+            _mint(receiver, id, amount);
+
+            tokenSupply[id] += amount;
+            minted += amount;
         }
+
+        totalSupply += minted;
     }
 
     // this seems dangerous
@@ -87,10 +108,20 @@ contract AldersonDiceNFT is ERC6909 {
 
         require(length == amounts.length, "length");
 
+        uint256 id;
+        uint256 amount;
         for (uint256 i = 0; i < length; i++) {
-            _burn(owner, tokenIds[i], amounts[i]);
+            id = tokenIds[i];
+            amount = amounts[i];
 
-            burned += amounts[i];
+            if (amount > 0) {
+                _burn(owner, id, amount);
+
+                tokenSupply[id] -= amount;
+                burned += amount;
+            }
         }
+
+        totalSupply -= burned;
     }
 }
