@@ -78,13 +78,19 @@ contract AldersonDiceNFT is ERC6909 {
     }
 
     // this seems dangerous
-    function burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts) external onlyGameLogic {
+    function burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts)
+        external
+        onlyGameLogic
+        returns (uint256 burned)
+    {
         uint256 length = tokenIds.length;
 
         require(length == amounts.length, "length");
 
         for (uint256 i = 0; i < length; i++) {
             _burn(owner, tokenIds[i], amounts[i]);
+
+            burned += amounts[i];
         }
     }
 }

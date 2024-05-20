@@ -72,8 +72,8 @@ contract AldersonDiceGameV1Test is Test {
 
         LibPRNG.PRNG memory prng;
 
-        (string memory name0, string memory symbol0) = game.dieInfo(color0);
-        (string memory name1, string memory symbol1) = game.dieInfo(color1);
+        (string memory name0, string memory symbol0) = game.dice(color0);
+        (string memory name1, string memory symbol1) = game.dice(color1);
 
         console.log("name0", name0);
         console.log("name1", name1);
@@ -112,8 +112,8 @@ contract AldersonDiceGameV1Test is Test {
         console.log("color0", color0);
         console.log("color1", color1);
 
-        (string memory name0, string memory symbol0) = game.dieInfo(color0);
-        (string memory name1, string memory symbol1) = game.dieInfo(color1);
+        (string memory name0, string memory symbol0) = game.dice(color0);
+        (string memory name1, string memory symbol1) = game.dice(color1);
 
         console.log("name0", name0);
         console.log("name1", name1);
