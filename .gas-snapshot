@@ -1,3 +1,4 @@
-AldersonDiceGameV1Test:testFuzz_prankedNftMint(address,uint256) (runs: 257, μ: 47774, ~: 47774)
-AldersonDiceGameV1Test:test_buySomeDice() (gas: 155994)
-AldersonDiceGameV1Test:test_twoDiceSkirmish() (gas: 208428)
+AldersonDiceGameV1Test:testFuzz_prankedNftMint(address,uint256) (runs: 257, μ: 47692, ~: 47692)
+AldersonDiceGameV1Test:test_buySomeDice() (gas: 154113)
+AldersonDiceGameV1Test:test_twoBagSkirmish() (gas: 982426)
+AldersonDiceGameV1Test:test_twoDiceSkirmish() (gas: 126214)
