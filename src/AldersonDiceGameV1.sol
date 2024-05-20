@@ -13,8 +13,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     using SafeTransferLib for address;
     using LibPRNG for LibPRNG.PRNG;
 
-    uint8 public constant NUM_COLORS = 5;
-    uint8 public constant NUM_SIDES = 6;
+    uint256 public constant NUM_COLORS = 5;
+    uint256 public constant NUM_SIDES = 6;
     uint8 public constant NUM_ROUNDS = 10;
     uint8 public constant NUM_DICE_BAG = 12;
 
@@ -130,8 +130,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     /// TODO: do we want to somehow blind this until after the dice is buyDiceed? that would require more state
     /// this is here so that the game logic can upgrade but colors won't change
     /// @dev colors should NOT change with the version changing!
-    function color(uint256 diceId) public view returns (uint8) {
-        return uint8(uint256(keccak256(abi.encodePacked(address(nft), diceId))) % NUM_COLORS);
+    function color(uint256 diceId) public view returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(address(nft), diceId))) % NUM_COLORS;
     }
 
     function tokenURI(uint256 id) public view returns (string memory) {

@@ -106,8 +106,8 @@ contract AldersonDiceGameV1Test is Test {
         console.log("die0", die0);
         console.log("die1", die1);
 
-        uint32 color0 = game.color(die0);
-        uint32 color1 = game.color(die1);
+        uint256 color0 = game.color(die0);
+        uint256 color1 = game.color(die1);
 
         console.log("color0", color0);
         console.log("color1", color1);
