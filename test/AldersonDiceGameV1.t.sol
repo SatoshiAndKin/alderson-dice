@@ -88,7 +88,7 @@ contract AldersonDiceGameV1Test is Test {
         // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
         // TODO: what are the odds that they lose?
         // TODO: better to do do a bunch of games of 10 rounds?
-        (uint8 wins0, uint8 wins1, uint8 ties) = game.skirmishColors(prng, color0, color1, 10);
+        (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishColors(prng, color0, color1, 10);
 
         console.log("wins0", wins0);
         console.log("wins1", wins1);
@@ -100,8 +100,8 @@ contract AldersonDiceGameV1Test is Test {
 
     function test_twoBagSkirmish() public {
         // remember, dieIds start at 1, but colors start at 0!
-        uint16 die0 = 2;
-        uint16 die1 = 7;
+        uint256 die0 = 2;
+        uint256 die1 = 7;
 
         console.log("die0", die0);
         console.log("die1", die1);
@@ -144,7 +144,7 @@ contract AldersonDiceGameV1Test is Test {
         // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
         // TODO: what are the odds that they lose?
         // TODO: better to do do a bunch of games of 10 rounds?
-        (uint8 wins0, uint8 wins1, uint8 ties) = game.skirmishBags(prng, bag0, bag1, 10);
+        (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishBags(prng, bag0, bag1, 10);
 
         console.log("wins0", wins0);
         console.log("wins1", wins1);

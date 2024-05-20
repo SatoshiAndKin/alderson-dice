@@ -196,12 +196,13 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     {
         uint256 bagSize = diceBag0.length;
 
-        require(bagSize >= rounds, "need more dice for this many rounds");
         require(bagSize == diceBag1.length, "Dice bags must be the same length");
+        require(bagSize >= rounds, "need more dice for this many rounds");
 
         // shuffle both sets of dice
+        // TODO: just shuffle one bag? with a good shuffle function, this is equivalent
         seed.shuffle(diceBag0);
-        seed.shuffle(diceBag1);
+        // seed.shuffle(diceBag1);
 
         for (uint256 i = 0; i < rounds; i++) {
             uint256 color0 = color(diceBag0[i]);
