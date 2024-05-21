@@ -148,16 +148,12 @@ contract AldersonDiceGameV1Test is Test {
         // require(game.prizeTokenAvailable() > prizeTokenAvailable, "unexpected prizeToken available");
 
         // TODO: take a range and have a helper function for this
-        uint256 burned = game.returnDice(
-            address(this),
-            returnIds,
-            returnAmounts
-        );
+        uint256 burned = game.returnDice(address(this), returnIds, returnAmounts);
 
         // TODO: what value should we expect?
         require(burned > 0, "unexpected burned");
 
-        // we've burned all the dice we minted. there should still be money in the dev fund 
+        // we've burned all the dice we minted. there should still be money in the dev fund
         // TODO: what value should we expect?
         require(prizeVault.balanceOf(address(game)) > 0, "unexpected game prizeVault balance");
         require(game.prizeTokenAvailable() > 0, "unexpected prizeToken available");
@@ -201,8 +197,8 @@ contract AldersonDiceGameV1Test is Test {
         console.log("symbol0", symbol0);
         console.log("symbol1", symbol1);
 
-        // require(nft.name(color0) == "Red", "not red");
-        // require(nft.name(color1) == "Olive", "not olive");
+        assertEq(name0, "Red", "not red");
+        assertEq(name1, "Olive", "not olive");
 
         // color1 (olive) is stronger than color0 (red)
         // skirmish out of 10 should be good odds. u8 max should be unlikely to fail

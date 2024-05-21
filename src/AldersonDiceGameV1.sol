@@ -39,20 +39,22 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // uint64 losses;
         // uint64 ties;
 
-        // TODO: the dice bags should be nfts instead of a player only having one
+        // TODO: the dice bags should be an ERC721 nft instead of a player only having one
         // TODO: this is too simple. think more about this. probably have "tournament" contracts with blinding and other cool things
         // TODO: let people use a contract to pick from the dice bag?
         uint256[NUM_DICE_BAG] favoriteDice;
     }
 
-    // // TODO: do we need to track these?
-    // uint256 minted;
-    // uint256 burned;
-
     event FavoriteDice(address player, uint256[NUM_DICE_BAG] dice);
 
     // event ScoreCard(string x);
-    event Fees(address player, uint256 devFundAmount, uint256 prizePoolShares, uint256 totalDiceValue, uint256 totalSponsorships);
+    event Fees(
+        address player,
+        uint256 devFundAmount,
+        uint256 prizePoolShares,
+        uint256 totalDiceValue,
+        uint256 totalSponsorships
+    );
 
     // TODO: this should use console.log instead
     event Pips(uint256 color0, uint32[NUM_SIDES] pips0, uint256 color1, uint32[NUM_SIDES] pips1);
@@ -168,16 +170,29 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         tokenURIPrefix = _tokenURIPrefix;
     }
 
-    function currentDrawing(uint256 numDice) public view returns (uint256[] memory x) {
+    function currentBag() public view returns (uint256[] memory bag) {
         LibPRNG.PRNG memory prng = blockPrng();
 
-        x = new uint256[](numDice);
+        bag = currentBag(prng, NUM_DICE_BAG);
+    }
 
-        // pick a dice bag worth of random colors
-        // this dice don't actually exist. they are just for picking colors
-        for (uint256 i = 0; i < numDice; i++) {
-            x[i] = prng.next() % NUM_COLORS;
+    /// @notice a random bag currently available for purchase. this changes every block
+    function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public pure returns (uint256[] memory bag) {
+        (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomDice(prng, numDice);
+
+        bag = new uint256[](numDice);
+        uint256 bagIndex = 0;
+
+        uint256 numIds = diceIds.length;
+        for (uint256 i = 0; i < numIds; i++) {
+            for (uint256 j = 0; j < diceAmounts[i]; j++) {
+                bag[bagIndex] = diceIds[i];
+                bagIndex++;
+            }
         }
+
+        // TODO: does this shuffle matter? it probably isn't necessary, but shuffling is fun, right?
+        prng.shuffle(bag);
     }
 
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
@@ -251,8 +266,10 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     {
         PlayerInfo memory playerInfo = players[player];
 
+        uint256[] memory diceBag1 = currentBag(prng, NUM_DICE_BAG);
         uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);
-        uint256[] memory diceBag1 = currentDrawing(NUM_DICE_BAG);
+
+        require(diceBag1.length == diceBag0.length, "bad bag size");
 
         for (uint256 i = 0; i < NUM_DICE_BAG; i++) {
             diceBag0[i] = playerInfo.favoriteDice[i];
@@ -262,7 +279,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     /// @notice compare 2 player's favorite dice
-    function skirmishPlayerInfos(LibPRNG.PRNG memory prng, address player0, address player1)
+    function skirmishPlayers(LibPRNG.PRNG memory prng, address player0, address player1)
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
@@ -283,13 +300,15 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         faceId = prng.next() % NUM_SIDES;
     }
 
-    function _randomAmounts(LibPRNG.PRNG memory prng, uint256 numDice)
-        internal
+    function randomDice(LibPRNG.PRNG memory prng, uint256 numDice)
+        public
         pure
         returns (uint256[] memory tokenIds, uint256[] memory amounts)
     {
         uint256 sum = 0;
 
+        // TODO: this should actually be NUM_DICE.
+        // TODO: modify this distribution so that dice in higher tiers are more rare?
         tokenIds = new uint256[](NUM_COLORS);
         amounts = new uint256[](NUM_COLORS);
 
@@ -316,15 +335,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.shuffle(tokenIds);
     }
 
-    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 shares)
-        internal
-    {
+    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 shares) internal {
         PlayerInfo storage playerInfo = players[receiver];
 
         playerInfo.minted += numDice;
 
         // half the shares are held for the player. dice can be burned to recover half the cost
         // we MUST do the math on shares to avoid rounding errors!
+        // TODO: instead of half, take a configurable amount?
         uint256 half_shares = shares / 2;
 
         // the other half of the shares are split between the prize fund and the dev fund
@@ -345,7 +363,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         emit Fees(receiver, devFundAmount, prizeFundShares, totalDiceValue, totalSponsorships);
 
-        (uint256[] memory diceIds, uint256[] memory diceAmounts) = _randomAmounts(prng, numDice);
+        // TODO: make this public so that a frame can easily show the current dice bag that is for sale
+        (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomDice(prng, numDice);
 
         nft.mint(receiver, diceIds, diceAmounts);
     }
@@ -420,7 +439,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         refundAssets = FixedPointMathLib.fullMulDiv(totalDiceValue, burned, totalSupply);
 
         // TODO: due to rounding errors, i don't think we actually have this much! i think we need 4696's math here to save us
-        // that, or we calculate how many shares 
+        // that, or we calculate how many shares
         // withdraw takes the amount of assets
         vaultToken.withdraw(refundAssets, player, address(this));
 
@@ -451,26 +470,21 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     /// @notice thank you for your sponsorship
+    /// @dev todo? have an approval system for this?
     function withdrawSponsership(uint256 amount) public {
-        require(msg.sender == devFund, "!auth");
-
-        uint256 maxAmount = sponsorships[devFund];
+        uint256 maxAmount = sponsorships[msg.sender];
 
         require(amount <= maxAmount, "!bal");
 
         sponsorships[msg.sender] -= amount;
         totalSponsorships -= amount;
 
+        uint256 shares = vaultToken.previewWithdraw(amount);
+
         // withdraw takes the amount of assets
-        vaultToken.withdraw(amount, address(this), msg.sender);
+        // we leave the shares in the vault because it saves gas and they can withdraw if they want to
+        vaultToken.transfer(address(this), shares);
     }
-
-    // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme
-
-    // // a future contract will want this function. but we don't want it in V1
-    // function release() public onlyOwner {
-    //     _setOwner(address(0));
-    // }
 
     function prizeTokenAvailable() public view returns (uint256 available) {
         uint256 shares = prizeSharesAvailable();
@@ -498,14 +512,24 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         address(token).safeTransfer(to, amount);
     }
 
+    /// @dev TODO: limit how often this can happen?
+    /// @dev if the devFund wants a cut, that logic can be part of the prizeFund
     function sweepPrizeFund() public returns (uint256 shares) {
-        // TODO: limit how often this can happen?
         shares = prizeSharesAvailable();
-
-        require(shares > 0, "!bal");
 
         vaultToken.transfer(prizeFund, shares);
     }
+
+    /*
+     * Under construction...
+     */
+
+    // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme
+
+    // // a future contract will want this function. but we don't want it in V1
+    // function release() public onlyOwner {
+    //     _setOwner(address(0));
+    // }
 
     // TODO: recover 6909 tokens
 }
