@@ -16,14 +16,13 @@ fn main() {
     });
 }
 
-
 #[component]
 fn App() -> impl IntoView {
-
     let window = window().expect("no global `window` exists");
 
     let (provider, set_provider) = create_signal(None);
     let (count, set_count) = create_signal(0);
+    let (chain_id, set_chain_id) = create_signal("".to_string());
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -38,19 +37,22 @@ fn App() -> impl IntoView {
 
         let provider = Reflect::get(&detail, &JsValue::from_str("provider")).unwrap();
 
-        let provider = eip1193::EIP1193Provider::try_from(provider).unwrap();
+        let provider = eip1193::EIP1193Provider::new(provider, set_chain_id).unwrap();
 
         logging::log!("{:?}", provider);
 
         // TODO: make some calls in the background?
 
+        // TODO: this should be added to a list, rather than taking over
         set_provider(Some(provider));
     }) as Box<dyn FnMut(_)>);
+
+    let announce_provider_callback = announce_provider_callback.into_js_value();
 
     window
         .add_event_listener_with_callback(
             "eip6963:announceProvider",
-            announce_provider_callback.as_ref().unchecked_ref(),
+            announce_provider_callback.unchecked_ref(),
         )
         .expect("failed to add event listener");
 
@@ -68,6 +70,8 @@ fn App() -> impl IntoView {
             // define an event listener with on:
             on:click=move |_| {
                 set_count.update(|n| *n += 1);
+
+                logging::log!("clicked");
             }
         >
             // text nodes are wrapped in quotation marks
@@ -81,8 +85,27 @@ fn App() -> impl IntoView {
             fallback=|| view! { <UnsupportedBrowser/> }
         >
             <p>"Provider found!"</p>
+
+            <button
+                // define an event listener with on:
+                on:click=move |_| {
+                    let provider = provider().expect("no provider");
+
+                    logging::log!("todo: check provider. if not arbitrum, ask to connect. {:?}", provider);
+
+                    spawn_local(async move {
+                        // TODO: this is wrong. we don't want to spawn local. we want to use <Suspense> and <ErrorBoundary>
+                        let chain_id = provider.chain_id().await;
+
+                        logging::log!("chain_id: {:?}", chain_id);
+                    });
+                }
+            >
+                // text nodes are wrapped in quotation marks
+                "Connect to Arbitrum"
+            </button>
         </Show>
-        
+
     }
 }
 
