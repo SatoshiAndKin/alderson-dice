@@ -32,15 +32,16 @@ impl TryFrom<JsValue> for EIP1193Provider {
             let chain_id = args.as_string().expect("no chain id");
             logging::log!("chain_id: {:?}", chain_id);
 
-            window()
-                .location()
-                .reload()
-                .expect("failed to reload");
+            window().location().reload().expect("failed to reload");
         }) as Box<dyn FnMut(JsValue)>);
 
         let on_chain_changed = on_chain_changed.into_js_value();
 
-        on.call2(&value, &JsValue::from_str("chainChanged"), &on_chain_changed)?;
+        on.call2(
+            &value,
+            &JsValue::from_str("chainChanged"),
+            &on_chain_changed,
+        )?;
 
         Ok(Self {
             _inner: value,
