@@ -1,14 +1,18 @@
 {
-    "rust-analyzer.rustfmt.overrideCommand": [
-        "leptosfmt",
-        "--stdin",
-        "--rustfmt"
-    ],
+    "rust-analyzer.server.extraEnv": {
+        "CARGO_TARGET_DIR": "target/rust-analyzer"
+    },
+    // "rust-analyzer.rustfmt.overrideCommand": [
+    //     "leptosfmt",
+    //     "--stdin",
+    //     "--rustfmt",
+    //     "--target-dir",
+    //     "target/rust-analyzer"
+    // ],
     "rust-analyzer.procMacro.ignored": {
         "leptos_macro": [
             // optional:
             // "component",
             "server"
         ],
-    }
-}
+    },

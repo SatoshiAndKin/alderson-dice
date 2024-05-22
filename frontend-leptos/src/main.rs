@@ -9,13 +9,21 @@ use web_sys::window;
 fn main() {
     console_error_panic_hook::set_once();
 
-    let (count, set_count) = create_signal(0);
+    mount_to_body(move || {
+        view! {
+            <App />
+        }
+    });
+}
+
+
+#[component]
+fn App() -> impl IntoView {
 
     let window = window().expect("no global `window` exists");
 
     let (provider, set_provider) = create_signal(None);
-
-    let has_provider = move || provider().is_some();
+    let (count, set_count) = create_signal(0);
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -53,36 +61,39 @@ fn main() {
         .dispatch_event(&request_provider_event)
         .expect("failed to dispatch event");
 
-    // TODO:
-    mount_to_body(move || {
-        view! {
-            <p>"Hello, world!"</p>
-            <p>
-                {move || {
-                    if has_provider() {
-                        return view! {
-                            <button
-                                on:click=move |_| {
-                                    set_count.update(|n| *n += 1);
-                                }
-                            >
-                                "Click me: "
-                                // on stable, this is move || count.get();
-                                {move || count()}
-                            </button>
-                        }.into_view();
-                    } else {
-                        return view! {
-                            <p>
-                                "Your browser is unsupported. No cryptocurrency wallet found. Please use"
-                                <a href="https://www.coinbase.com/wallet">"Coinbase Wallet"</a>
-                                "or"
-                                <a href="https://frame.sh">"Frame"</a>
-                            </p>
-                        }.into_view();
-                    }
-                }}
-            </p>
-        }
-    })
+    view! {
+        <h1>"Alderson Dice"</h1>
+
+        <button
+            // define an event listener with on:
+            on:click=move |_| {
+                set_count.update(|n| *n += 1);
+            }
+        >
+            // text nodes are wrapped in quotation marks
+            "Click me: "
+            // blocks can include Rust code
+            {count}
+        </button>
+
+        <Show
+            when=move || { provider().is_some() }
+            fallback=|| view! { <UnsupportedBrowser/> }
+        >
+            <p>"Provider found!"</p>
+        </Show>
+        
+    }
+}
+
+#[component]
+fn UnsupportedBrowser() -> impl IntoView {
+    view! {
+        <p>
+            "Your browser is unsupported. No cryptocurrency wallet found. Please use the "
+            <a href="https://www.coinbase.com/wallet">"Coinbase Wallet app"</a>
+            " or the "
+            <a href="https://frame.sh">"Frame browser extension"</a>.
+        </p>
+    }
 }
