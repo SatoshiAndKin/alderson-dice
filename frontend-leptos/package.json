@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "viem": "^2.12.1"
+  },
+  "devDependencies": {
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4"
+  }
+}

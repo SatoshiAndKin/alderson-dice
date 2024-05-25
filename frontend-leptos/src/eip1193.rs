@@ -131,7 +131,7 @@ impl EIP1193Provider {
 
                 let subscriptions = subscriptions.read().expect("unable to lock subscriptions");
 
-                todo!();
+                todo!("handle subscriptions");
             }) as Box<dyn FnMut(JsValue)>)
         };
 

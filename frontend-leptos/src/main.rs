@@ -3,7 +3,7 @@ pub mod eip6963;
 
 use js_sys::Reflect;
 use leptos::*;
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
 
 const ARBITRUM_CHAIN_ID: &str = "0xa4b1";
@@ -68,29 +68,31 @@ fn App() -> impl IntoView {
     view! {
         <h1>"Alderson Dice"</h1>
 
-        <button
-            // define an event listener with on:
-            on:click=move |_| {
-                set_count.update(|n| *n += 1);
+        <div>
+            <button
+                // define an event listener with on:
+                on:click=move |_| {
+                    set_count.update(|n| *n += 1);
 
-                logging::log!("clicked");
-            }
-        >
-            // text nodes are wrapped in quotation marks
-            "Click me: "
-            // blocks can include Rust code
-            {count}
-        </button>
-
+                    logging::log!("clicked");
+                }
+            >
+                // text nodes are wrapped in quotation marks
+                "Click me: "
+                // blocks can include Rust code
+                {count}
+            </button>
+        </div>
 
         <Show
             when=move || { provider().is_some() }
             fallback=|| view! { <UnsupportedBrowser/> }
         >
+            <div>
             {
                 if chain_id() == ARBITRUM_CHAIN_ID {
                     view! {
-                        <p>"Connected to Arbitrum"</p>
+                        "Connected to Arbitrum"
                     }.into_view()
                 } else {
                     view! {
@@ -100,15 +102,13 @@ fn App() -> impl IntoView {
                                 let provider = provider().expect("no provider");
                                 let chain_id = chain_id();
 
-                                if ARBITRUM_CHAIN_ID != chain_id {
-                                    // connected to some other chain (or we got here quickly and the wallet hasn't responded yet)
-                                    logging::log!("chain_id: {:?}", chain_id);
+                                // connected to some other chain (or we got here quickly and the wallet hasn't responded yet)
+                                logging::log!("chain_id: {:?}", chain_id);
 
-                                    // TODO: what EIP do we need for that?
-                                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
-                                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
-                                    logging::warn!("TODO: ask to connect to arbitrum. {:?}", provider);
-                                }
+                                // TODO: what EIP do we need for that?
+                                // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
+                                // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
+                                logging::warn!("TODO: ask to connect to arbitrum. {:?}", provider);
                             }
                         >
                             "Connect to Arbitrum"
@@ -116,12 +116,13 @@ fn App() -> impl IntoView {
                     }.into_view()
                 }
             }
+            </div>
         </Show>
 
         <Show
             when=move || { !chain_id().is_empty() }
         >
-            <p>"chain_id: "{chain_id}</p>
+            <div>"chain_id: "{chain_id}</div>
         </Show>
     }
 }

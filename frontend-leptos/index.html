@@ -1,13 +1,24 @@
 <!DOCTYPE html>
-<html>
-<base data-trunk-public-url />
+<html lang="en">
 
-<!-- todo: why isn't this loading? -->
-<!-- <link data-trunk rel="css" rel="stylesheet" href="public/styles.css" /> -->
+<head>
+    <base data-trunk-public-url />
 
-<link data-trunk rel="icon" href="public/favicon.ico" />
+    <!-- todo: why isn't this loading? -->
+    <!-- <link data-trunk rel="css" rel="stylesheet" href="public/styles.css" /> -->
 
-<head></head>
+    <meta charset="utf-8" />
+    <link data-trunk rel="rust" data-wasm-opt="z" />
+
+    <link data-trunk rel="icon" type="image/ico" href="/public/favicon.ico" />
+
+    <link data-trunk rel="tailwind-css" href="/style/tailwind.css" />
+
+    <script data-trunk type="text/javascript" src="public/bundle.js"></script>
+    <script data-trunk type="text/javascript" src="public/node_modules_viem__esm_utils_ccip_js.bundle.js"></script>
+
+    <title>Alderson Dice</title>
+</head>
 
 <body></body>
 
