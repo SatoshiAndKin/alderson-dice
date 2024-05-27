@@ -66,6 +66,7 @@ fn App() -> impl IntoView {
         .expect("failed to dispatch event");
 
     view! {
+        <div class="container">
         <h1>"Alderson Dice"</h1>
 
         <div>
@@ -124,6 +125,8 @@ fn App() -> impl IntoView {
         >
             <div>"chain_id: "{chain_id}</div>
         </Show>
+
+        </div>
     }
 }
 

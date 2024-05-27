@@ -4,6 +4,10 @@ module.exports = {
         files: ["*.html", "./src/**/*.rs"],
     },
     theme: {
+        container: {
+            center: true,
+            padding: '2rem',
+        },
         extend: {},
     },
     plugins: [],
