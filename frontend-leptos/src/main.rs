@@ -52,6 +52,39 @@ fn App() -> impl IntoView {
         set_provider(Some(provider));
     }) as Box<dyn FnMut(_)>);
 
+    let (desired_chain, set_desired_chain) = create_signal("");
+    let desired_chain_resource = create_resource(
+        move || (provider(), chain_id(), desired_chain()),
+        |(provider, chain_id, desired_chain_id)| async move {
+            if let Some(provider) = provider {
+                if chain_id != desired_chain_id {
+                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
+                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
+                    // <https://eips.ethereum.org/EIPS/eip-3326>
+                    #[derive(serde::Serialize)]
+                    struct Params {
+                        chainId: &'static str,
+                    }
+
+                    // TODO: should this be a json string, or should it be a js object?
+                    let params = serde_wasm_bindgen::to_value(&[Params {
+                        chainId: desired_chain_id,
+                    }])
+                    .unwrap();
+
+                    // TODO: how do we handle async things here?
+                    // <https://docs.rs/leptos/latest/leptos/fn.create_resource.html>
+                    let f = provider.request("wallet_switchEthereumChain", Some(&params));
+
+                    // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
+                    f.await.unwrap();
+                }
+            }
+
+            chain_id
+        },
+    );
+
     let announce_provider_callback = announce_provider_callback.into_js_value();
 
     window
@@ -94,41 +127,43 @@ fn App() -> impl IntoView {
         >
             <div>
             {
-                if chain_id() == ARBITRUM_CHAIN_ID {
+                let chain_id = chain_id();
+
+                if chain_id == ARBITRUM_CHAIN_ID {
                     view! {
                         "Connected to Arbitrum"
                     }.into_view()
                 } else {
                     view! {
+                        // a button that requests the arbitrum provider when clicked
                         <button
                             // define an event listener with on:
                             on:click=move |_| {
-                                let provider = provider().expect("no provider");
-                                let chain_id = chain_id();
 
                                 // connected to some other chain (or we got here quickly and the wallet hasn't responded yet)
-                                logging::log!("chain_id: {:?}", chain_id);
+                                logging::log!("wrong chain_id: {:?}", chain_id);
 
-                                // TODO: what EIP do we need for that?
-                                // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
-                                // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
-                                // <https://eips.ethereum.org/EIPS/eip-3326>
-                                logging::warn!("TODO: ask to connect to arbitrum. {:?}", provider);
+                                set_desired_chain(ARBITRUM_CHAIN_ID);
+
                             }
-                        >
+                            >
                             "Connect to Arbitrum"
-                        </button>
-                    }.into_view()
+                            </button>
+                        }.into_view()
+                    }
                 }
-            }
-            </div>
-        </Show>
+                </div>
+                </Show>
 
+        // TODO: what do we do with this? we need to show it somewhere
         <Show
             when=move || { !chain_id().is_empty() }
         >
-            <div>"chain_id: "{chain_id}</div>
+            <div>"desired chain_id: "{chain_id}</div>
         </Show>
+
+        // TODO: put this in a Show?
+        <div>"desired chain_id: "{desired_chain_resource}</div>
 
         </div>
     }
