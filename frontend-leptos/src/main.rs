@@ -53,18 +53,18 @@ fn App() -> impl IntoView {
         set_provider(Some(provider));
     }) as Box<dyn FnMut(_)>);
 
-    let (desired_chain, set_desired_chain) = create_signal("");
-    let desired_chain_resource = create_resource(
-        move || (provider(), chain_id(), desired_chain()),
-        move |(provider, chain_id, desired_chain_id)| async move {
-            if let Some(provider) = provider {
-                if desired_chain_id != "" && chain_id != desired_chain_id {
+    let desired_chain: Action<(eip1193::EIP1193Provider, String, String), _> =
+        create_action(move |input: &(eip1193::EIP1193Provider, String, String)| {
+            let (provider, chain_id, desired_chain_id) = input.clone();
+
+            async move {
+                if !desired_chain_id.is_empty() && chain_id != desired_chain_id {
                     // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
                     // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
                     // <https://eips.ethereum.org/EIPS/eip-3326>
                     #[derive(serde::Serialize)]
                     struct Params {
-                        chainId: &'static str,
+                        chainId: String,
                     }
 
                     // TODO: should this be a json string, or should it be a js object?
@@ -73,21 +73,17 @@ fn App() -> impl IntoView {
                     }])
                     .unwrap();
 
-                    // TODO: how do we handle async things here?
-                    // <https://docs.rs/leptos/latest/leptos/fn.create_resource.html>
                     let f = provider.request("wallet_switchEthereumChain", Some(&params));
-
-                    // // i don't like this, but i want this to only run once and not keep forcing the chain back and it does that
-                    // set_desired_chain("");
 
                     // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
                     f.await.unwrap();
-                }
-            }
 
-            chain_id
-        },
-    );
+                    // TODO: save the provider in the config so that we can automatically reconnect to it if we see it again
+                }
+
+                chain_id
+            }
+        });
 
     let announce_provider_callback = announce_provider_callback.into_js_value();
 
@@ -131,39 +127,36 @@ fn App() -> impl IntoView {
         >
             <div>
             {
-                let chain_id = chain_id();
+                let chain_id: String = chain_id();
+                let provider: eip1193::EIP1193Provider = provider().unwrap();
+
+                let dispatch_args = (provider.clone(), chain_id.clone(), ARBITRUM_CHAIN_ID.to_string());
 
                 if chain_id == ARBITRUM_CHAIN_ID {
+                    // we call dispatch because we might start with the wallet already being connected. i don't love that
+                    desired_chain.dispatch(dispatch_args);
                     view! {
-                        "Connected to Arbitrum"
+                        <div>"chain_id: "{&chain_id}</div>
+                        <div>"Successfully Connected to Arbitrum"</div>
                     }.into_view()
                 } else {
                     view! {
+                        <div>"wrong chain_id: "{&chain_id}</div>
+
                         // a button that requests the arbitrum provider when clicked
-                        <button
-                            // define an event listener with on:
-                            on:click=move |_| {
-
-                                // connected to some other chain (or we got here quickly and the wallet hasn't responded yet)
-                                logging::log!("wrong chain_id: {:?}", chain_id);
-
-                                set_desired_chain(ARBITRUM_CHAIN_ID);
-
-                            }
+                        <div>
+                            <button
+                                on:click=move |_| {
+                                    desired_chain.dispatch(dispatch_args.clone())
+                                }
                             >
-                            "Connect to Arbitrum"
+                                "Connect to Arbitrum"
                             </button>
+                        </div>
                         }.into_view()
                     }
                 }
-                </div>
-                </Show>
-
-        // TODO: what do we do with this? we need to show it somewhere
-        <Show
-            when=move || { !chain_id().is_empty() }
-        >
-            <div>"chain_id: "{chain_id}</div>
+            </div>
         </Show>
 
         </div>
