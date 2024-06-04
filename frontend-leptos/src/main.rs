@@ -3,6 +3,7 @@ pub mod eip6963;
 
 use js_sys::Reflect;
 use leptos::{logging::log, *};
+use std::collections::HashMap;
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast};
 use web_sys::window;
 
@@ -55,9 +56,9 @@ fn App() -> impl IntoView {
     let (desired_chain, set_desired_chain) = create_signal("");
     let desired_chain_resource = create_resource(
         move || (provider(), chain_id(), desired_chain()),
-        |(provider, chain_id, desired_chain_id)| async move {
+        move |(provider, chain_id, desired_chain_id)| async move {
             if let Some(provider) = provider {
-                if chain_id != desired_chain_id {
+                if desired_chain_id != "" && chain_id != desired_chain_id {
                     // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
                     // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
                     // <https://eips.ethereum.org/EIPS/eip-3326>
@@ -75,6 +76,9 @@ fn App() -> impl IntoView {
                     // TODO: how do we handle async things here?
                     // <https://docs.rs/leptos/latest/leptos/fn.create_resource.html>
                     let f = provider.request("wallet_switchEthereumChain", Some(&params));
+
+                    // // i don't like this, but i want this to only run once and not keep forcing the chain back and it does that
+                    // set_desired_chain("");
 
                     // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
                     f.await.unwrap();
@@ -159,11 +163,8 @@ fn App() -> impl IntoView {
         <Show
             when=move || { !chain_id().is_empty() }
         >
-            <div>"desired chain_id: "{chain_id}</div>
+            <div>"chain_id: "{chain_id}</div>
         </Show>
-
-        // TODO: put this in a Show?
-        <div>"desired chain_id: "{desired_chain_resource}</div>
 
         </div>
     }
