@@ -3,7 +3,7 @@ pub mod eip6963;
 
 use js_sys::Reflect;
 use leptos::{logging::log, *};
-use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
+use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast};
 use web_sys::window;
 
 const ARBITRUM_CHAIN_ID: &str = "0xa4b1";
@@ -33,14 +33,14 @@ fn App() -> impl IntoView {
         let detail = event.detail();
 
         // TODO: use serde to do this?
-        let info = Reflect::get(&detail, &JsValue::from_str("info")).expect("no info");
+        let info = Reflect::get(&detail, &"info".into()).expect("no info");
 
         let info: eip6963::EIP6963ProviderInfo =
             serde_wasm_bindgen::from_value(info).expect("invalid info");
 
         logging::log!("{:?}", info);
 
-        let provider = Reflect::get(&detail, &JsValue::from_str("provider")).unwrap();
+        let provider = Reflect::get(&detail, &"provider".into()).unwrap();
 
         let provider = eip1193::EIP1193Provider::new(provider, set_chain_id).unwrap();
 
@@ -112,6 +112,7 @@ fn App() -> impl IntoView {
                                 // TODO: what EIP do we need for that?
                                 // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
                                 // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
+                                // <https://eips.ethereum.org/EIPS/eip-3326>
                                 logging::warn!("TODO: ask to connect to arbitrum. {:?}", provider);
                             }
                         >

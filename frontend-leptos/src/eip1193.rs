@@ -57,15 +57,15 @@ interface ProviderRpcError extends Error {
 
 impl EIP1193Provider {
     pub fn new(value: JsValue, set_chain_id: WriteSignal<String>) -> Result<Self, JsValue> {
-        let request = Reflect::get(&value, &JsValue::from_str("request")).unwrap();
+        let request = Reflect::get(&value, &"request".into()).unwrap();
 
         if request.is_undefined() {
-            return Err(JsValue::from_str("request is undefined"));
+            return Err("request is undefined".into());
         }
 
         let request = request.dyn_into::<Function>()?;
 
-        let on = Reflect::get(&value, &JsValue::from_str("on")).unwrap();
+        let on = Reflect::get(&value, &"on".into()).unwrap();
 
         let on = on.dyn_into::<Function>()?;
 
@@ -85,11 +85,7 @@ impl EIP1193Provider {
 
         let on_chain_changed = on_chain_changed.into_js_value();
 
-        on.call2(
-            &value,
-            &JsValue::from_str("chainChanged"),
-            &on_chain_changed,
-        )?;
+        on.call2(&value, &"chainChanged".into(), &on_chain_changed)?;
 
         // on_connect
         let on_connect = Closure::wrap(Box::new(move |connect_info: JsValue| {
@@ -97,7 +93,7 @@ impl EIP1193Provider {
 
             // TODO: JsValue(Object({"chainId":"0xa4b1"}))
 
-            let chain_id = Reflect::get(&connect_info, &JsValue::from_str("chainId"))
+            let chain_id = Reflect::get(&connect_info, &"chainId".into())
                 .expect("no chain id")
                 .as_string()
                 .expect("no chain id");
@@ -107,7 +103,7 @@ impl EIP1193Provider {
 
         let on_connect = on_connect.into_js_value();
 
-        on.call2(&value, &JsValue::from_str("connect"), &on_connect)?;
+        on.call2(&value, &"connect".into(), &on_connect)?;
 
         // on_disconnect
         let on_disconnect = Closure::wrap(Box::new(move || {
@@ -118,7 +114,7 @@ impl EIP1193Provider {
 
         let on_disconnect = on_disconnect.into_js_value();
 
-        on.call2(&value, &JsValue::from_str("disconnect"), &on_disconnect)?;
+        on.call2(&value, &"disconnect".into(), &on_disconnect)?;
 
         // on_message (for eth_subscribe)
         let on_message = {
@@ -137,7 +133,7 @@ impl EIP1193Provider {
 
         let on_message = on_message.into_js_value();
 
-        on.call2(&value, &JsValue::from_str("message"), &on_message)?;
+        on.call2(&value, &"message".into(), &on_message)?;
 
         // on_accounts_changed
         let on_accounts_changed = Closure::wrap(Box::new(move |accounts: JsValue| {
@@ -146,14 +142,10 @@ impl EIP1193Provider {
 
         let on_accounts_changed = on_accounts_changed.into_js_value();
 
-        on.call2(
-            &value,
-            &JsValue::from_str("accountsChanged"),
-            &on_accounts_changed,
-        )?;
+        on.call2(&value, &"accountsChanged".into(), &on_accounts_changed)?;
 
         // remove listeners
-        let remove_listener = Reflect::get(&value, &JsValue::from_str("removeListener")).unwrap();
+        let remove_listener = Reflect::get(&value, &"removeListener".into()).unwrap();
 
         let remove_listener = remove_listener.dyn_into::<Function>()?;
 
@@ -175,14 +167,10 @@ impl EIP1193Provider {
     ) -> Result<JsValue, JsValue> {
         let arg1 = js_sys::Object::new();
 
-        js_sys::Reflect::set(
-            &arg1,
-            &JsValue::from_str("method"),
-            &JsValue::from_str(method),
-        )?;
+        js_sys::Reflect::set(&arg1, &"method".into(), &method.into())?;
 
         if let Some(params) = params {
-            js_sys::Reflect::set(&arg1, &JsValue::from_str("params"), params)?;
+            js_sys::Reflect::set(&arg1, &"params".into(), params)?;
         }
 
         // // TODO: need a debug_info
@@ -212,7 +200,7 @@ impl EIP1193Provider {
         action: &str,
         callback: SubscriptionCallback,
     ) -> Result<(), JsValue> {
-        let action = JsValue::from_str(action);
+        let action = action.into();
 
         let subscription_id = self.request("eth_subscribe", Some(&action)).await?;
 
