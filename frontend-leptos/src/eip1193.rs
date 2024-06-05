@@ -7,6 +7,7 @@ use std::rc::Rc;
 use std::sync::RwLock;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 
+// TODO: what should this type actually be?
 type SubscriptionCallback = Box<dyn Fn(()) -> Result<(), JsValue>>;
 
 // TODO: theres a bunch fields on here, but we don't need them yet
@@ -94,12 +95,12 @@ impl EIP1193Provider {
         on.call2(&value, &"chainChanged".into(), &on_chain_changed)?;
 
         // on_connect
-        let on_connect = Closure::wrap(Box::new(move |connect_info: JsValue| {
-            logging::log!("connect: {:?}", connect_info);
+        let on_connect = Closure::wrap(Box::new(move |connect_object: JsValue| {
+            logging::log!("connect: {:?}", connect_object);
 
             // TODO: JsValue(Object({"chainId":"0xa4b1"}))
 
-            let chain_id = Reflect::get(&connect_info, &"chainId".into())
+            let chain_id = Reflect::get(&connect_object, &"chainId".into())
                 .expect("no chain id")
                 .as_string()
                 .expect("no chain id");
@@ -131,9 +132,20 @@ impl EIP1193Provider {
 
                 // TODO: what do we do here? we need to track subscriptions and call the appropriate callbacks
 
+                let data = Reflect::get(&message, &"data".into()).unwrap();
+
+                let sub_id = Reflect::get(&data, &"subscription".into())
+                    .unwrap()
+                    .as_string()
+                    .unwrap();
+
                 let subscriptions = subscriptions.read().expect("unable to lock subscriptions");
 
-                todo!("handle subscriptions");
+                if let Some(sub) = subscriptions.get(&sub_id) {
+                    sub(()).expect("failed to call subscription callback");
+                } else {
+                    logging::log!("no subscription found for id: {:?}", sub_id);
+                }
             }) as Box<dyn FnMut(JsValue)>)
         };
 
@@ -166,6 +178,7 @@ impl EIP1193Provider {
 }
 
 impl EIP1193Provider {
+    /// TODO: for params, instead of JsValue, take things that impl Serialize
     pub async fn request(
         &self,
         method: &str,
@@ -208,6 +221,7 @@ impl EIP1193Provider {
     ) -> Result<(), JsValue> {
         let action = action.into();
 
+        // TODO: if we have an http connection, this just won't
         let subscription_id = self.request("eth_subscribe", Some(&action)).await?;
 
         // hex str. we don't need to convert it though
