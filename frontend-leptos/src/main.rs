@@ -34,9 +34,6 @@ fn App() -> impl IntoView {
     let (wallet, set_wallet) = create_signal(None);
     let (latest_block_head, set_latest_block_header) = create_signal(None);
 
-    let publicClient = createPublicClientForChain(ARBITRUM_CHAIN_ID.into());
-    log!("publicClient: {:?}", publicClient);
-
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
 
@@ -251,7 +248,7 @@ fn UnsupportedBrowser() -> impl IntoView {
 extern "C" {
     fn hello() -> String;
 
-    fn createPublicClientForChain(chainId: String) -> JsValue;
+    fn createPublicClientForChain(chainId: String, eip1193_provider: JsValue) -> JsValue;
 
     fn createWalletClientForChain(chainId: String, eip1193Provider: JsValue) -> JsValue;
 }
