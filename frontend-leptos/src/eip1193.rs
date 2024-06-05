@@ -191,6 +191,10 @@ impl EIP1193Provider {
             subscriptions,
         })
     }
+
+    pub fn inner(&self) -> JsValue {
+        self._inner.clone()
+    }
 }
 
 impl EIP1193Provider {

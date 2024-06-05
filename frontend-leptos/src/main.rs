@@ -1,5 +1,6 @@
 pub mod eip1193;
 pub mod eip6963;
+pub mod viem;
 
 use js_sys::Reflect;
 use leptos::{logging::log, *};
@@ -29,6 +30,7 @@ fn App() -> impl IntoView {
     let (chain_id, set_chain_id) = create_signal("".to_string());
     let (accounts, set_accounts) = create_signal(Vec::new());
     let (provider, set_provider) = create_signal(None);
+    let (wallet, set_wallet) = create_signal(None);
 
     let publicClient = createPublicClientForChain(ARBITRUM_CHAIN_ID.into());
     log!("publicClient: {:?}", publicClient);
@@ -43,18 +45,22 @@ fn App() -> impl IntoView {
 
         logging::log!("{:?}", info);
 
-        let provider = Reflect::get(&detail, &"provider".into()).unwrap();
+        let provider_value = Reflect::get(&detail, &"provider".into()).unwrap();
 
-        let provider = eip1193::EIP1193Provider::new(provider, set_chain_id, set_accounts).unwrap();
+        let provider =
+            eip1193::EIP1193Provider::new(provider_value.clone(), set_chain_id, set_accounts)
+                .unwrap();
 
         logging::log!("{:?}", provider);
 
         // TODO: make some calls in the background?
 
-        // TODO: this should be added to a list, rather than taking over
+        // TODO: this should be added to a list, rather than taking over. then the user can pick which provider to use and we can make the wallet from that
         set_provider(Some(provider));
     }) as Box<dyn FnMut(_)>);
 
+    // TODO: this action feels weird. we fire it from a button press but also from an event listener
+    // TODO: move this all to using viem's helpers?
     let switch_chain: Action<(eip1193::EIP1193Provider, String, String), _> =
         create_action(move |input: &(eip1193::EIP1193Provider, String, String)| {
             let (provider, chain_id, desired_chain_id) = input.clone();
@@ -83,8 +89,11 @@ fn App() -> impl IntoView {
 
                     log!("switched: {:?}", switched);
 
+                    let wallet = viem::ViemWallet::new(desired_chain_id.clone(), provider.inner());
+
                     // TODO: not sure about this. i thought the provider would update it for us, but it seems able to miss somehow
                     set_chain_id(desired_chain_id);
+                    set_wallet(Some(wallet));
 
                     // TODO: save the provider to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
                 }
@@ -187,6 +196,14 @@ fn App() -> impl IntoView {
         </Show>
 
         <Show
+            when=move || { wallet().is_some() }
+        >
+            <div>
+                {move || format!("{:?}", wallet().unwrap())} " is connected"
+            </div>
+        </Show>
+
+        <Show
             when=move || { !accounts().is_empty() }
             fallback=|| view! { <div>"No accounts"</div> }
         >
@@ -198,6 +215,7 @@ fn App() -> impl IntoView {
                 {accounts}
             </div>
         </Show>
+
 
         </div>
     }
@@ -219,7 +237,7 @@ fn UnsupportedBrowser() -> impl IntoView {
 extern "C" {
     fn hello() -> String;
 
-    fn createPublicClientForChain(chainId: JsValue) -> JsValue;
+    fn createPublicClientForChain(chainId: String) -> JsValue;
 
-    fn createWalletClientForChain(chainId: JsValue, eip1193Provider: JsValue) -> JsValue;
+    fn createWalletClientForChain(chainId: String, eip1193Provider: JsValue) -> JsValue;
 }

@@ -1,4 +1,4 @@
-import { http, custom, createPublicClient } from 'viem'
+import { http, custom, createPublicClient, createWalletClient } from 'viem'
 import { arbitrum, base, mainnet } from 'viem/chains'
 
 export function hello() {
