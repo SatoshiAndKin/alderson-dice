@@ -205,16 +205,16 @@ fn App() -> impl IntoView {
         // <Show
         //     when=move || { wallet().is_some() }
         // >
-        //     <div>
+        //     <article>
         //         Able to query the chain
         //         // TODO: disconnect button
         //         // TODO: request account button
-        //     </div>
+        //     </article>
         // </Show>
 
         <Show
             when=move || { !accounts().is_empty() }
-            fallback=|| view! { <div>"No accounts"</div> }
+            fallback=|| view! { <article>"No accounts"</article> }
         >
             <!-- "TODO: show accounts as an actual list" -->
             <!-- "TODO: disconnect button" -->
