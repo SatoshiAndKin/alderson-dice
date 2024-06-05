@@ -25,10 +25,13 @@ fn App() -> impl IntoView {
     let x = hello();
     log!("{:?}", x);
 
-    let (provider, set_provider) = create_signal(None);
     let (count, set_count) = create_signal(0);
     let (chain_id, set_chain_id) = create_signal("".to_string());
     let (accounts, set_accounts) = create_signal(Vec::new());
+    let (provider, set_provider) = create_signal(None);
+
+    let publicClient = createPublicClientForChain(ARBITRUM_CHAIN_ID.into());
+    log!("publicClient: {:?}", publicClient);
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -88,6 +91,7 @@ fn App() -> impl IntoView {
 
                 // TODO: what eip?
                 // TODO: we might do this more often than necessary
+                // TODO: DRY. this same code is in the provider, but we do need it here too
                 let accounts = provider
                     .request("eth_requestAccounts", None)
                     .await
