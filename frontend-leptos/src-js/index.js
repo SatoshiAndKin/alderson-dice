@@ -5,39 +5,28 @@ export function hello() {
   return 'Hello, world!';
 }
 
-export function createPublicClientForChain(chainId) {
-  let chain;
+function chainIdToChain(chainId) {
   switch (chainId) {
     case "0x1":
-      chain = mainnet
-      break;
+      return mainnet;
     case "0xa4b1":
-      chain = arbitrum
-      break;
+      return arbitrum;
     case "0x2105":
-      chain = base
-      break;
+      return base;
     default: throw new Error(`Unsupported chain ID: ${chainId}`)
   }
+}
 
-  // TODO: maybe instead of just returning the client, we could add an `http()` with a eip6963 event?
+export function createPublicClientForChain(chainId) {
   return createPublicClient({
-    chain,
+    chain: chainIdToChain(chainId),
     transport: http()
   });
 };
 
 export function createWalletClientForChain(chainId, eip1193Provider) {
-  let chain;
-  switch (chainId) {
-    case "0xa4b1":
-      chain = arbitrum
-      break;
-    default: throw new Error(`Unsupported chain ID: ${chainId}`)
-  }
-
   return createWalletClient({
-    chain,
+    chain: chainIdToChain(chainId),
     transport: custom(eip1193Provider)
   });
 };
