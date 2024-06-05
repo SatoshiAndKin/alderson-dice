@@ -66,59 +66,60 @@ fn App() -> impl IntoView {
             let (provider, chain_id, desired_chain_id) = input.clone();
 
             async move {
-                if !desired_chain_id.is_empty() && chain_id != desired_chain_id {
-                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
-                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
-                    // <https://eips.ethereum.org/EIPS/eip-3326>
-                    #[derive(serde::Serialize)]
-                    struct Params<'a> {
-                        chainId: &'a str,
+                if !desired_chain_id.is_empty() {
+                    if chain_id != desired_chain_id {
+                        // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
+                        // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
+                        // <https://eips.ethereum.org/EIPS/eip-3326>
+                        #[derive(serde::Serialize)]
+                        struct Params<'a> {
+                            chainId: &'a str,
+                        }
+
+                        // TODO: convenience method for this
+                        let params = serde_wasm_bindgen::to_value(&[Params {
+                            chainId: &desired_chain_id,
+                        }])
+                        .unwrap();
+
+                        // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
+                        let switched = provider
+                            .request("wallet_switchEthereumChain", Some(&params))
+                            .await
+                            .expect("failed to switch chain");
+
+                        log!("switched: {:?}", switched);
+
+                        set_chain_id(desired_chain_id);
+                    } else {
+                        let wallet = viem::ViemWallet::new(desired_chain_id, provider.inner());
+
+                        set_wallet(Some(wallet));
+
+                        // TODO: what eip?
+                        // TODO: DRY. this same code is in the provider, but we do need it here too
+                        let accounts = provider
+                            .request("eth_requestAccounts", None)
+                            .await
+                            .expect("failed to request accounts");
+
+                        let accounts = accounts
+                            .dyn_into::<js_sys::Array>()
+                            .expect("Expected an array for accounts");
+
+                        // TODO: turn this into an Address object?
+                        let accounts: Vec<_> = accounts
+                            .iter()
+                            .map(|x| x.as_string().expect("account is not a string"))
+                            .collect();
+
+                        log!("requested accounts: {:?}", accounts);
+
+                        set_accounts(accounts);
+
+                        // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
                     }
-
-                    // TODO: convenience method for this
-                    let params = serde_wasm_bindgen::to_value(&[Params {
-                        chainId: &desired_chain_id,
-                    }])
-                    .unwrap();
-
-                    // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
-                    let switched = provider
-                        .request("wallet_switchEthereumChain", Some(&params))
-                        .await
-                        .expect("failed to switch chain");
-
-                    log!("switched: {:?}", switched);
-
-                    let wallet = viem::ViemWallet::new(desired_chain_id.clone(), provider.inner());
-
-                    // TODO: not sure about this. i thought the provider would update it for us, but it seems able to miss somehow
-                    set_chain_id(desired_chain_id);
-                    set_wallet(Some(wallet));
-
-                    // TODO: save the provider to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
                 }
-
-                // TODO: what eip?
-                // TODO: we might do this more often than necessary
-                // TODO: DRY. this same code is in the provider, but we do need it here too
-                let accounts = provider
-                    .request("eth_requestAccounts", None)
-                    .await
-                    .expect("failed to request accounts");
-
-                let accounts = accounts
-                    .dyn_into::<js_sys::Array>()
-                    .expect("Expected an array for accounts");
-
-                // TODO: turn this into an Address object?
-                let accounts: Vec<_> = accounts
-                    .iter()
-                    .map(|x| x.as_string().expect("account is not a string"))
-                    .collect();
-
-                log!("requested accounts: {:?}", accounts);
-
-                set_accounts(accounts);
 
                 chain_id
             }
