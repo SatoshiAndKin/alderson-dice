@@ -2,7 +2,7 @@ pub mod eip1193;
 pub mod eip6963;
 pub mod viem;
 
-use js_sys::Reflect;
+use js_sys::{BigInt, Reflect};
 use leptos::{logging::log, *};
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
@@ -224,7 +224,16 @@ fn App() -> impl IntoView {
             when=move || { latest_block_head().is_some() }
         >
             <div>
-                {move || format!("{:?}", latest_block_head().unwrap())}
+                "Block Number: "
+                {move || {
+                    let latest_block_head = latest_block_head().expect("no block head");
+
+                    let num = latest_block_head.get("number").expect("no block num").clone();
+
+                    let num = num.dyn_into::<BigInt>().expect("num is bigint");
+
+                    format!("{}", num.to_string(10).unwrap())
+                }}
             </div>
         </Show>
 

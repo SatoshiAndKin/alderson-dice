@@ -38,6 +38,7 @@ impl ViemWallet {
 
             let block_header_keys = Reflect::own_keys(&block_header).expect("has keys");
 
+            // TODO: i feel like there is a better way to turn an Object into a HashMap. probably using "entries"
             let mut block_header_map = HashMap::new();
 
             for key in block_header_keys.iter() {
