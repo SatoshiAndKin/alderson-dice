@@ -28,6 +28,7 @@ fn App() -> impl IntoView {
     let (provider, set_provider) = create_signal(None);
     let (count, set_count) = create_signal(0);
     let (chain_id, set_chain_id) = create_signal("".to_string());
+    let (accounts, set_accounts) = create_signal(Vec::new());
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -41,7 +42,7 @@ fn App() -> impl IntoView {
 
         let provider = Reflect::get(&detail, &"provider".into()).unwrap();
 
-        let provider = eip1193::EIP1193Provider::new(provider, set_chain_id).unwrap();
+        let provider = eip1193::EIP1193Provider::new(provider, set_chain_id, set_accounts).unwrap();
 
         logging::log!("{:?}", provider);
 
@@ -71,13 +72,40 @@ fn App() -> impl IntoView {
                     }])
                     .unwrap();
 
-                    let f = provider.request("wallet_switchEthereumChain", Some(&params));
-
                     // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
-                    f.await.unwrap();
+                    let switched = provider
+                        .request("wallet_switchEthereumChain", Some(&params))
+                        .await
+                        .expect("failed to switch chain");
 
-                    // TODO: save the provider in the config so that we can automatically reconnect to it if we see it again
+                    log!("switched: {:?}", switched);
+
+                    // TODO: not sure about this. i thought the provider would update it for us, but it seems able to miss somehow
+                    set_chain_id(desired_chain_id);
+
+                    // TODO: save the provider to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
                 }
+
+                // TODO: what eip?
+                // TODO: we might do this more often than necessary
+                let accounts = provider
+                    .request("eth_requestAccounts", None)
+                    .await
+                    .expect("failed to request accounts");
+
+                let accounts = accounts
+                    .dyn_into::<js_sys::Array>()
+                    .expect("Expected an array for accounts");
+
+                // TODO: turn this into an Address object?
+                let accounts: Vec<_> = accounts
+                    .iter()
+                    .map(|x| x.as_string().expect("account is not a string"))
+                    .collect();
+
+                log!("requested accounts: {:?}", accounts);
+
+                set_accounts(accounts);
 
                 chain_id
             }
@@ -151,6 +179,19 @@ fn App() -> impl IntoView {
                         }.into_view()
                     }
                 }
+            </div>
+        </Show>
+
+        <Show
+            when=move || { !accounts().is_empty() }
+            fallback=|| view! { <div>"No accounts"</div> }
+        >
+            <!-- "TODO: show accounts as an actual list" -->
+            <!-- "TODO: disconnect button" -->
+            <!-- "TODO: request account button" -->
+            <div>
+                "Accounts: "
+                {accounts}
             </div>
         </Show>
 

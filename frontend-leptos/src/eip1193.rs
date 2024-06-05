@@ -63,7 +63,11 @@ interface ProviderRpcError extends Error {
 */
 
 impl EIP1193Provider {
-    pub fn new(value: JsValue, set_chain_id: WriteSignal<String>) -> Result<Self, JsValue> {
+    pub fn new(
+        value: JsValue,
+        set_chain_id: WriteSignal<String>,
+        set_accounts: WriteSignal<Vec<String>>,
+    ) -> Result<Self, JsValue> {
         let request = Reflect::get(&value, &"request".into()).unwrap();
 
         if request.is_undefined() {
@@ -155,7 +159,19 @@ impl EIP1193Provider {
 
         // on_accounts_changed
         let on_accounts_changed = Closure::wrap(Box::new(move |accounts: JsValue| {
-            logging::log!("accounts: {:?}", accounts);
+            logging::log!("accounts changed: {:?}", accounts);
+
+            let accounts = accounts
+                .dyn_into::<js_sys::Array>()
+                .expect("Expected an array for accounts");
+
+            // TODO: turn this into an Address object?
+            let accounts = accounts
+                .iter()
+                .map(|x| x.as_string().expect("account is not a string"))
+                .collect();
+
+            set_accounts(accounts);
         }) as Box<dyn FnMut(JsValue)>);
 
         let on_accounts_changed = on_accounts_changed.into_js_value();
