@@ -15,6 +15,7 @@ use super::createWalletClientForChain;
 pub struct ViemWallet {
     wallet_client: Option<JsValue>,
     public_client: JsValue,
+    // TODO: private wallet_client that sends to a protected relay instead of the user's node?
 }
 
 impl ViemWallet {

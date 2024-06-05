@@ -151,30 +151,25 @@ fn App() -> impl IntoView {
         .expect("failed to dispatch event");
 
     view! {
-        <div class="container">
+        <main class="container">
         <h1>"Alderson Dice"</h1>
 
-        <div>
-            <button
-                // define an event listener with on:
-                on:click=move |_| {
-                    set_count.update(|n| *n += 1);
-
-                    logging::log!("clicked");
-                }
-            >
-                // text nodes are wrapped in quotation marks
-                "Click me: "
-                // blocks can include Rust code
-                {count}
-            </button>
-        </div>
+        <button
+            on:click=move |_| {
+                set_count.update(|n| *n += 1);
+                logging::log!("clicked");
+            }
+        >
+            "Click me: "
+            {count}
+        </button>
+        <hr />
 
         <Show
             when=move || { provider().is_some() }
             fallback=|| view! { <UnsupportedBrowser/> }
         >
-            <div>
+            <article>
             {
                 let provider: eip1193::EIP1193Provider = provider().unwrap();
 
@@ -185,6 +180,7 @@ fn App() -> impl IntoView {
                     switch_chain.dispatch(dispatch_args);
                     view! {
                         <div>"chain_id: "{chain_id}</div>
+                        // TODO: should this be a button that we can click to disconnect?
                         <div>"Successfully Connected to Arbitrum"</div>
                     }.into_view()
                 } else {
@@ -202,7 +198,7 @@ fn App() -> impl IntoView {
                         }.into_view()
                     }
                 }
-            </div>
+            </article>
         </Show>
 
         // // TODO: what should this be?
@@ -223,16 +219,16 @@ fn App() -> impl IntoView {
             <!-- "TODO: show accounts as an actual list" -->
             <!-- "TODO: disconnect button" -->
             <!-- "TODO: request account button" -->
-            <div>
+            <article>
                 "Accounts: "
                 {accounts}
-            </div>
+            </article>
         </Show>
 
         <Show
             when=move || { latest_block_head().is_some() }
         >
-            <div>
+            <article>
                 "Block Number: "
                 {move || {
                     let latest_block_head = latest_block_head().expect("no block head");
@@ -243,10 +239,10 @@ fn App() -> impl IntoView {
 
                     format!("{}", num.to_string(10).unwrap())
                 }}
-            </div>
+            </article>
         </Show>
 
-        </div>
+        </main>
     }
 }
 
