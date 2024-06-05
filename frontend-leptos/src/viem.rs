@@ -13,13 +13,21 @@ use super::createWalletClientForChain;
 
 #[derive(Clone)]
 pub struct ViemWallet {
-    wallet_client: JsValue,
+    wallet_client: Option<JsValue>,
     public_client: JsValue,
 }
 
 impl ViemWallet {
-    pub fn new(chain_id: String, eip1193_provider: JsValue) -> Self {
-        let wallet_client = createWalletClientForChain(chain_id.clone(), eip1193_provider.clone());
+    pub fn new(chain_id: String, eip1193_provider: Option<JsValue>) -> Self {
+        let eip1193_provider = eip1193_provider.unwrap_or_else(JsValue::undefined);
+
+        let wallet_client = if eip1193_provider.is_undefined() {
+            None
+        } else {
+            let x = createWalletClientForChain(chain_id.clone(), eip1193_provider.clone());
+
+            Some(x)
+        };
 
         let public_client = createPublicClientForChain(chain_id, eip1193_provider);
 
@@ -60,14 +68,17 @@ impl ViemWallet {
 
         // TODO: use bindings from the typescript types
         Reflect::set(&arguments, &"onBlock".into(), &closure).expect("setting onBlock");
+        Reflect::set(&arguments, &"emitMissed".into(), &true.into()).expect("setting emitMissed");
+        Reflect::set(&arguments, &"emitOnBegin".into(), &true.into()).expect("setting emitOnBegin");
 
         let watch_blocks_fn = Reflect::get(&self.public_client, &"watchBlocks".into())
             .expect("getting watchBlocks")
             .dyn_into::<Function>()
             .expect("watchBlocks is not a function");
 
+        // TODO: use the return function
         watch_blocks_fn
-            .call1(&self.wallet_client, &arguments.into())
+            .call1(&self.public_client, &arguments.into())
             .expect("calling watchBlocks");
     }
 }

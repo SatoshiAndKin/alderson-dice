@@ -7,6 +7,8 @@ use leptos::{logging::log, *};
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
 
+use crate::viem::ViemWallet;
+
 const ARBITRUM_CHAIN_ID: &str = "0xa4b1";
 
 fn main() {
@@ -26,13 +28,18 @@ fn App() -> impl IntoView {
     let x = hello();
     log!("{:?}", x);
 
+    // TODO: subscribe to new heads here so people start seeing data immediately
+    let defaultWallet = ViemWallet::new(ARBITRUM_CHAIN_ID.to_string(), None);
+
     // TODO: i think these should maybe be moved into their own components
     let (count, set_count) = create_signal(0);
     let (chain_id, set_chain_id) = create_signal("".to_string());
     let (accounts, set_accounts) = create_signal(Vec::new());
     let (provider, set_provider) = create_signal(None);
-    let (wallet, set_wallet) = create_signal(None);
+    let (wallet, set_wallet) = create_signal(Some(defaultWallet.clone()));
     let (latest_block_head, set_latest_block_header) = create_signal(None);
+
+    defaultWallet.watch_heads(set_latest_block_header);
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -91,7 +98,8 @@ fn App() -> impl IntoView {
 
                         set_chain_id(desired_chain_id);
                     } else {
-                        let wallet = viem::ViemWallet::new(desired_chain_id, provider.inner());
+                        let wallet =
+                            viem::ViemWallet::new(desired_chain_id, Some(provider.inner()));
 
                         set_wallet(Some(wallet.clone()));
 
@@ -188,7 +196,7 @@ fn App() -> impl IntoView {
                             <button
                                 on:click=move |_| switch_chain.dispatch(dispatch_args.clone())
                             >
-                                "Connect to Arbitrum"
+                                "Connect Your Wallet"
                             </button>
                         </div>
                         }.into_view()
@@ -197,15 +205,16 @@ fn App() -> impl IntoView {
             </div>
         </Show>
 
-        <Show
-            when=move || { wallet().is_some() }
-        >
-            <div>
-                {move || format!("{:?}", wallet().unwrap())} " is connected"
-                // TODO: disconnect button
-                // TODO: request account button
-            </div>
-        </Show>
+        // // TODO: what should this be?
+        // <Show
+        //     when=move || { wallet().is_some() }
+        // >
+        //     <div>
+        //         Able to query the chain
+        //         // TODO: disconnect button
+        //         // TODO: request account button
+        //     </div>
+        // </Show>
 
         <Show
             when=move || { !accounts().is_empty() }
