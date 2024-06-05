@@ -26,11 +26,13 @@ fn App() -> impl IntoView {
     let x = hello();
     log!("{:?}", x);
 
+    // TODO: i think these should maybe be moved into their own components
     let (count, set_count) = create_signal(0);
     let (chain_id, set_chain_id) = create_signal("".to_string());
     let (accounts, set_accounts) = create_signal(Vec::new());
     let (provider, set_provider) = create_signal(None);
     let (wallet, set_wallet) = create_signal(None);
+    let (latest_block_head, set_latest_block_header) = create_signal(None);
 
     let publicClient = createPublicClientForChain(ARBITRUM_CHAIN_ID.into());
     log!("publicClient: {:?}", publicClient);
@@ -94,7 +96,7 @@ fn App() -> impl IntoView {
                     } else {
                         let wallet = viem::ViemWallet::new(desired_chain_id, provider.inner());
 
-                        set_wallet(Some(wallet));
+                        set_wallet(Some(wallet.clone()));
 
                         // TODO: what eip?
                         // TODO: DRY. this same code is in the provider, but we do need it here too
@@ -118,6 +120,8 @@ fn App() -> impl IntoView {
                         set_accounts(accounts);
 
                         // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
+
+                        wallet.watch_heads(set_latest_block_header);
                     }
                 }
 
@@ -201,6 +205,8 @@ fn App() -> impl IntoView {
         >
             <div>
                 {move || format!("{:?}", wallet().unwrap())} " is connected"
+                // TODO: disconnect button
+                // TODO: request account button
             </div>
         </Show>
 
@@ -217,6 +223,13 @@ fn App() -> impl IntoView {
             </div>
         </Show>
 
+        <Show
+            when=move || { latest_block_head().is_some() }
+        >
+            <div>
+                {move || format!("{:?}", latest_block_head().unwrap())}
+            </div>
+        </Show>
 
         </div>
     }

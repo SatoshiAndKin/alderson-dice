@@ -19,6 +19,9 @@ function chainIdToChain(chainId) {
 
 export function createPublicClientForChain(chainId) {
   return createPublicClient({
+    batch: {
+      multicall: true,
+    },
     chain: chainIdToChain(chainId),
     transport: http()
   });
@@ -26,6 +29,9 @@ export function createPublicClientForChain(chainId) {
 
 export function createWalletClientForChain(chainId, eip1193Provider) {
   return createWalletClient({
+    batch: {
+      multicall: true,
+    },
     chain: chainIdToChain(chainId),
     transport: custom(eip1193Provider)
   });
