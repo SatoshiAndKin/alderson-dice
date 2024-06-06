@@ -233,6 +233,10 @@ fn App() -> impl IntoView {
                     format!("{}", num.to_string(10).unwrap())
                 }}
             </article>
+
+            // TODO: component for block age
+
+            // TODO: component for the game's current bag according to the current block
         </Show>
 
         <Show
@@ -243,6 +247,7 @@ fn App() -> impl IntoView {
             {
                 let provider: eip1193::EIP1193Provider = provider().unwrap();
 
+                // TODO: don't call chain_id twice?
                 let disconnect_chain_args = (provider.clone(), chain_id().clone(), "".to_string());
                 let switch_chain_args = (provider.clone(), chain_id().clone(), ARBITRUM_CHAIN_ID.to_string());
 
@@ -275,30 +280,34 @@ fn App() -> impl IntoView {
             </article>
         </Show>
 
-        // // TODO: what should this be?
-        // <Show
-        //     when=move || { wallet().is_some() }
-        // >
-        //     <article>
-        //         Able to query the chain
-        //         // TODO: disconnect button
-        //         // TODO: request account button
-        //     </article>
-        // </Show>
-
         <Show
             when=move || { !accounts().is_empty() }
         >
+            // TODO: button to request accounts instead of only doing it on chain switch
+            // this saves them having to hit "disconnect" when they want to add multiple accounts
+            // TODO: i wish wallets had better support for linking multiple accounts
+
             <article>
-                {move || format!("{:?}", wallet_client())}
-            </article>
-            <!-- "TODO: show accounts as an actual list" -->
-            <!-- "TODO: disconnect button" -->
-            <!-- "TODO: request account button" -->
-            <article>
+                // TODO: show accounts as an actual list
                 "Accounts: "
                 {accounts}
             </article>
+
+            // TODO: component for balances
+
+            // TODO: component for pending transactions
+
+            // TODO: component for transaction history
+
+            // TODO: component for buying dice
+
+            // TODO: component for selling dice
+
+            // TODO: component for returning dice
+
+            // TODO: component for seeing favorite dice
+
+            // TODO: component for choosing favorite dice
         </Show>
 
         </main>
