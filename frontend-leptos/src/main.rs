@@ -4,6 +4,8 @@ pub mod viem;
 
 use js_sys::{BigInt, Reflect};
 use leptos::{logging::log, *};
+use std::rc::Rc;
+use std::sync::Mutex;
 use viem::ViemPublicClient;
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
@@ -40,7 +42,9 @@ fn App() -> impl IntoView {
 
     // TODO: eventually emit_missed should be a user option
     // TODO: if another provider is chosen, this subscription should be ended
-    defaultPublicClient.watch_heads(set_latest_block_header, false);
+    let block_sub = defaultPublicClient.watch_heads(set_latest_block_header, false);
+
+    let block_subscription = Rc::new(Mutex::new((block_sub, defaultPublicClient.inner())));
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -67,74 +71,111 @@ fn App() -> impl IntoView {
     }) as Box<dyn FnMut(_)>);
 
     // TODO: this action feels weird. we fire it from a button press but also from an event listener
-    // TODO: move this all to using viem's helpers?
     let switch_chain: Action<(eip1193::EIP1193Provider, String, String), _> =
         create_action(move |input: &(eip1193::EIP1193Provider, String, String)| {
             let (provider, chain_id, desired_chain_id) = input.clone();
+            let defaultPublicClient = defaultPublicClient.clone();
+            let block_subscription = block_subscription.clone();
 
             async move {
-                if !desired_chain_id.is_empty() {
-                    if chain_id != desired_chain_id {
-                        // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
-                        // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
-                        // <https://eips.ethereum.org/EIPS/eip-3326>
-                        #[derive(serde::Serialize)]
-                        struct Params<'a> {
-                            chainId: &'a str,
+                // TODO: there should maybe be a match here? otherwise i think this is just wrong overall and not how components/actions should work
+                if desired_chain_id.is_empty() {
+                    if !chain_id.is_empty() {
+                        // TODO: really not sure about this. it feels wrong. but this lets us disconnect the wallet
+                        set_wallet_client(None);
+                        set_public_client(defaultPublicClient.clone());
+
+                        // TODO: DRY
+                        {
+                            let mut lock = block_subscription.lock().unwrap();
+
+                            let (sub, context) = (&lock.0, &lock.1);
+
+                            let returned = sub.call0(context).expect("failed to unsubscribe");
+
+                            log!("unsubscribed: {:?}", returned);
+
+                            let sub =
+                                defaultPublicClient.watch_heads(set_latest_block_header, false);
+
+                            *lock = (sub, defaultPublicClient.inner());
                         }
 
-                        // TODO: convenience method for this
-                        let params = serde_wasm_bindgen::to_value(&[Params {
-                            chainId: &desired_chain_id,
-                        }])
-                        .unwrap();
-
-                        // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
-                        let switched = provider
-                            .request("wallet_switchEthereumChain", Some(&params))
-                            .await
-                            .expect("failed to switch chain");
-
-                        log!("switched: {:?}", switched);
-
-                        set_chain_id(desired_chain_id);
-                    } else {
-                        // TODO: this should maybe be a separate action tied to provider changing?
-                        let wallet =
-                            viem::ViemWalletClient::new(desired_chain_id.clone(), provider.inner());
-
-                        let public =
-                            viem::ViemPublicClient::new(desired_chain_id, Some(provider.inner()));
-
-                        set_wallet_client(Some(wallet));
-                        set_public_client(public.clone());
-
-                        public.watch_heads(set_latest_block_header, false);
-                        // TODO: the old subscription (if any) must be ended
-
-                        // TODO: what eip?
-                        // TODO: DRY. this same code is in the provider, but we do need it here too
-                        let accounts = provider
-                            .request("eth_requestAccounts", None)
-                            .await
-                            .expect("failed to request accounts");
-
-                        let accounts = accounts
-                            .dyn_into::<js_sys::Array>()
-                            .expect("Expected an array for accounts");
-
-                        // TODO: turn this into an Address object?
-                        let accounts: Vec<_> = accounts
-                            .iter()
-                            .map(|x| x.as_string().expect("account is not a string"))
-                            .collect();
-
-                        log!("requested accounts: {:?}", accounts);
-
-                        set_accounts(accounts);
-
-                        // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
+                        set_accounts(Vec::new());
+                        set_chain_id("".to_string());
                     }
+                } else if chain_id != desired_chain_id {
+                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1102.md>
+                    // <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2255.md>
+                    // <https://eips.ethereum.org/EIPS/eip-3326>
+                    #[derive(serde::Serialize)]
+                    struct Params<'a> {
+                        chainId: &'a str,
+                    }
+
+                    // TODO: convenience method for this
+                    let params = serde_wasm_bindgen::to_value(&[Params {
+                        chainId: &desired_chain_id,
+                    }])
+                    .unwrap();
+
+                    // we don't actually need to do anything with this result because we have hooks for the chain id changing elsewhere
+                    let switched = provider
+                        .request("wallet_switchEthereumChain", Some(&params))
+                        .await
+                        .expect("failed to switch chain");
+
+                    log!("switched: {:?}", switched);
+
+                    set_chain_id(desired_chain_id);
+                } else {
+                    // TODO: this should maybe be a separate action tied to provider changing?
+                    let wallet =
+                        viem::ViemWalletClient::new(desired_chain_id.clone(), provider.inner());
+
+                    let public =
+                        viem::ViemPublicClient::new(desired_chain_id, Some(provider.inner()));
+
+                    set_wallet_client(Some(wallet));
+                    set_public_client(public.clone());
+
+                    // TODO: DRY
+                    {
+                        let mut lock = block_subscription.lock().unwrap();
+
+                        let (sub, context) = (&lock.0, &lock.1);
+
+                        let returned = sub.call0(context).expect("failed to unsubscribe");
+
+                        log!("unsubscribed: {:?}", returned);
+
+                        let sub = public.watch_heads(set_latest_block_header, false);
+
+                        *lock = (sub, public.inner());
+                    }
+
+                    // TODO: what eip?
+                    // TODO: DRY. this same code is in the provider, but we do need it here too
+                    let accounts = provider
+                        .request("eth_requestAccounts", None)
+                        .await
+                        .expect("failed to request accounts");
+
+                    let accounts = accounts
+                        .dyn_into::<js_sys::Array>()
+                        .expect("Expected an array for accounts");
+
+                    // TODO: turn this into an Address object?
+                    let accounts: Vec<_> = accounts
+                        .iter()
+                        .map(|x| x.as_string().expect("account is not a string"))
+                        .collect();
+
+                    log!("requested accounts: {:?}", accounts);
+
+                    set_accounts(accounts);
+
+                    // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
                 }
 
                 chain_id
@@ -210,7 +251,9 @@ fn App() -> impl IntoView {
 
                     view! {
                         <button
-                            on:click=move |_| switch_chain.dispatch(disconnect_chain_args.clone())
+                            on:click=move |_| {
+                                switch_chain.dispatch(disconnect_chain_args.clone())
+                            }
                         >
                             "Disconnect Your Wallet"
                         </button>

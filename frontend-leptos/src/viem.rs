@@ -34,12 +34,18 @@ impl ViemPublicClient {
         }
     }
 
+    pub fn inner(&self) -> JsValue {
+        self.inner.clone()
+    }
+
     /// TODO: return something that can be used to cancel the subscription
     pub fn watch_heads(
         &self,
         set_watch_heads: WriteSignal<Option<HashMap<String, JsValue>>>,
         emit_missed: bool,
-    ) {
+    ) -> Function {
+        let inner = self.inner.clone();
+
         let closure = Closure::wrap(Box::new(move |block_header: JsValue| {
             let block_header = block_header
                 .dyn_into::<Object>()
@@ -58,7 +64,7 @@ impl ViemPublicClient {
                 block_header_map.insert(key, value);
             }
 
-            log!("new block header: {:?}", block_header_map);
+            log!("new block header to {:?}: {:?}", inner, block_header_map);
 
             set_watch_heads(Some(block_header_map));
         }) as Box<dyn FnMut(JsValue)>);
@@ -78,10 +84,11 @@ impl ViemPublicClient {
             .dyn_into::<Function>()
             .expect("watchBlocks is not a function");
 
-        // TODO: use the return function
         watch_blocks_fn
             .call1(&self.inner, &arguments.into())
-            .expect("calling watchBlocks");
+            .expect("calling watchBlocks")
+            .dyn_into::<Function>()
+            .expect("watchBlocks did not return a function")
     }
 }
 
@@ -93,6 +100,10 @@ impl ViemWalletClient {
         Self {
             inner: wallet_client,
         }
+    }
+
+    pub fn inner(&self) -> JsValue {
+        self.inner.clone()
     }
 }
 
