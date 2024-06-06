@@ -202,16 +202,17 @@ fn App() -> impl IntoView {
         <main class="container">
         <h1>"Alderson Dice"</h1>
 
-        <button
-            on:click=move |_| {
-                set_count.update(|n| *n += 1);
-                logging::log!("clicked");
-            }
-        >
-            "Click me: "
-            {count}
-        </button>
-        <hr />
+        <article>
+            <button
+                on:click=move |_| {
+                    set_count.update(|n| *n += 1);
+                    logging::log!("clicked");
+                }
+            >
+                "Click me: "
+                {count}
+            </button>
+        </article>
 
         <article>
             {move || format!("{:?}", public_client())}
