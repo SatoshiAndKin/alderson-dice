@@ -267,7 +267,7 @@ fn App() -> impl IntoView {
                         <button
                             on:click=move |_| switch_chain.dispatch(switch_chain_args.clone())
                         >
-                            "Connect Your Wallet"
+                            "Connect Your Wallet to Arbitrum"
                         </button>
                     }.into_view()
                 }
