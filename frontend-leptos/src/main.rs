@@ -4,10 +4,9 @@ pub mod viem;
 
 use js_sys::{BigInt, Reflect};
 use leptos::{logging::log, *};
+use viem::ViemPublicClient;
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
-
-use crate::viem::ViemWallet;
 
 const ARBITRUM_CHAIN_ID: &str = "0xa4b1";
 
@@ -28,19 +27,20 @@ fn App() -> impl IntoView {
     let x = hello();
     log!("{:?}", x);
 
-    // TODO: subscribe to new heads here so people start seeing data immediately
-    let defaultWallet = ViemWallet::new(ARBITRUM_CHAIN_ID.to_string(), None);
+    let defaultPublicClient = ViemPublicClient::new(ARBITRUM_CHAIN_ID.to_string(), None);
 
     // TODO: i think these should maybe be moved into their own components
     let (count, set_count) = create_signal(0);
     let (chain_id, set_chain_id) = create_signal("".to_string());
     let (accounts, set_accounts) = create_signal(Vec::new());
     let (provider, set_provider) = create_signal(None);
-    let (wallet, set_wallet) = create_signal(Some(defaultWallet.clone()));
+    let (public_client, set_public_client) = create_signal(defaultPublicClient.clone());
+    let (wallet_client, set_wallet_client) = create_signal(None);
     let (latest_block_head, set_latest_block_header) = create_signal(None);
 
     // TODO: eventually emit_missed should be a user option
-    defaultWallet.watch_heads(set_latest_block_header, false);
+    // TODO: if another provider is chosen, this subscription should be ended
+    defaultPublicClient.watch_heads(set_latest_block_header, false);
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -99,10 +99,18 @@ fn App() -> impl IntoView {
 
                         set_chain_id(desired_chain_id);
                     } else {
+                        // TODO: this should maybe be a separate action tied to provider changing?
                         let wallet =
-                            viem::ViemWallet::new(desired_chain_id, Some(provider.inner()));
+                            viem::ViemWalletClient::new(desired_chain_id.clone(), provider.inner());
 
-                        set_wallet(Some(wallet.clone()));
+                        let public =
+                            viem::ViemPublicClient::new(desired_chain_id, Some(provider.inner()));
+
+                        set_wallet_client(Some(wallet));
+                        set_public_client(public.clone());
+
+                        public.watch_heads(set_latest_block_header, false);
+                        // TODO: the old subscription (if any) must be ended
 
                         // TODO: what eip?
                         // TODO: DRY. this same code is in the provider, but we do need it here too
@@ -126,8 +134,6 @@ fn App() -> impl IntoView {
                         set_accounts(accounts);
 
                         // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
-
-                        wallet.watch_heads(set_latest_block_header, false);
                     }
                 }
 
@@ -166,6 +172,27 @@ fn App() -> impl IntoView {
         </button>
         <hr />
 
+        <article>
+            {move || format!("{:?}", public_client())}
+        </article>
+
+        <Show
+            when=move || { latest_block_head().is_some() }
+        >
+            <article>
+                "Block Number: "
+                {move || {
+                    let latest_block_head = latest_block_head().expect("no block head");
+
+                    let num = latest_block_head.get("number").expect("no block num").clone();
+
+                    let num = num.dyn_into::<BigInt>().expect("num is bigint");
+
+                    format!("{}", num.to_string(10).unwrap())
+                }}
+            </article>
+        </Show>
+
         <Show
             when=move || { provider().is_some() }
             fallback=|| view! { <UnsupportedBrowser/> }
@@ -174,30 +201,33 @@ fn App() -> impl IntoView {
             {
                 let provider: eip1193::EIP1193Provider = provider().unwrap();
 
-                let dispatch_args = (provider.clone(), chain_id().clone(), ARBITRUM_CHAIN_ID.to_string());
+                let disconnect_chain_args = (provider.clone(), chain_id().clone(), "".to_string());
+                let switch_chain_args = (provider.clone(), chain_id().clone(), ARBITRUM_CHAIN_ID.to_string());
 
                 if chain_id() == ARBITRUM_CHAIN_ID {
-                    // we call dispatch because we might start with the wallet already being connected. i don't love that
-                    switch_chain.dispatch(dispatch_args);
+                    // we call dispatch because we might start with the wallet already being connected. i don't love this
+                    switch_chain.dispatch(switch_chain_args);
+
                     view! {
-                        // TODO: should this be a button that we can click to disconnect?
-                        <div>"Successfully Connected to Arbitrum"</div>
+                        <button
+                            on:click=move |_| switch_chain.dispatch(disconnect_chain_args.clone())
+                        >
+                            "Disconnect Your Wallet"
+                        </button>
                     }.into_view()
                 } else {
                     view! {
                         // a button that requests the arbitrum provider when clicked
                         // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
                         // TODO: should also let the user use other wallets like with walletconnect
-                        <div>
-                            <button
-                                on:click=move |_| switch_chain.dispatch(dispatch_args.clone())
-                            >
-                                "Connect Your Wallet"
-                            </button>
-                        </div>
-                        }.into_view()
-                    }
+                        <button
+                            on:click=move |_| switch_chain.dispatch(switch_chain_args.clone())
+                        >
+                            "Connect Your Wallet"
+                        </button>
+                    }.into_view()
                 }
+            }
             </article>
         </Show>
 
@@ -215,29 +245,15 @@ fn App() -> impl IntoView {
         <Show
             when=move || { !accounts().is_empty() }
         >
+            <article>
+                {move || format!("{:?}", wallet_client())}
+            </article>
             <!-- "TODO: show accounts as an actual list" -->
             <!-- "TODO: disconnect button" -->
             <!-- "TODO: request account button" -->
             <article>
                 "Accounts: "
                 {accounts}
-            </article>
-        </Show>
-
-        <Show
-            when=move || { latest_block_head().is_some() }
-        >
-            <article>
-                "Block Number: "
-                {move || {
-                    let latest_block_head = latest_block_head().expect("no block head");
-
-                    let num = latest_block_head.get("number").expect("no block num").clone();
-
-                    let num = num.dyn_into::<BigInt>().expect("num is bigint");
-
-                    format!("{}", num.to_string(10).unwrap())
-                }}
             </article>
         </Show>
 

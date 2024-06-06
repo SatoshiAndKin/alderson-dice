@@ -1,5 +1,7 @@
 //! TODO: rust bindings for the viem module (https://github.com/ratchetdesigns/ts-bindgen ?)
 //! TODO: component for the viem client https://viem.sh/docs/clients/transports/custom + https://viem.sh/docs/clients/transports/fallback
+//! TODO: <https://docs.walletconnect.com/web3modal/javascript/about>? use their modal instead of building all of it ourselves?
+//! TODO: private wallet_client that sends to a protected relay instead of the user's node?
 use std::collections::HashMap;
 
 use js_sys::{Function, Object, Reflect};
@@ -12,29 +14,23 @@ use crate::createPublicClientForChain;
 use super::createWalletClientForChain;
 
 #[derive(Clone)]
-pub struct ViemWallet {
-    wallet_client: Option<JsValue>,
-    public_client: JsValue,
-    // TODO: private wallet_client that sends to a protected relay instead of the user's node?
+pub struct ViemWalletClient {
+    inner: JsValue,
 }
 
-impl ViemWallet {
+#[derive(Clone)]
+pub struct ViemPublicClient {
+    inner: JsValue,
+}
+
+impl ViemPublicClient {
     pub fn new(chain_id: String, eip1193_provider: Option<JsValue>) -> Self {
         let eip1193_provider = eip1193_provider.unwrap_or_else(JsValue::undefined);
-
-        let wallet_client = if eip1193_provider.is_undefined() {
-            None
-        } else {
-            let x = createWalletClientForChain(chain_id.clone(), eip1193_provider.clone());
-
-            Some(x)
-        };
 
         let public_client = createPublicClientForChain(chain_id, eip1193_provider);
 
         Self {
-            wallet_client,
-            public_client,
+            inner: public_client,
         }
     }
 
@@ -77,20 +73,37 @@ impl ViemWallet {
             .expect("setting emitMissed");
         Reflect::set(&arguments, &"emitOnBegin".into(), &true.into()).expect("setting emitOnBegin");
 
-        let watch_blocks_fn = Reflect::get(&self.public_client, &"watchBlocks".into())
+        let watch_blocks_fn = Reflect::get(&self.inner, &"watchBlocks".into())
             .expect("getting watchBlocks")
             .dyn_into::<Function>()
             .expect("watchBlocks is not a function");
 
         // TODO: use the return function
         watch_blocks_fn
-            .call1(&self.public_client, &arguments.into())
+            .call1(&self.inner, &arguments.into())
             .expect("calling watchBlocks");
     }
 }
 
-impl std::fmt::Debug for ViemWallet {
+impl ViemWalletClient {
+    /// TODO: eventually this can
+    pub fn new(chain_id: String, eip1193_provider: JsValue) -> Self {
+        let wallet_client = createWalletClientForChain(chain_id, eip1193_provider);
+
+        Self {
+            inner: wallet_client,
+        }
+    }
+}
+
+impl std::fmt::Debug for ViemPublicClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ViemWallet").finish()
+        f.debug_struct("ViemPublicClient").finish()
+    }
+}
+
+impl std::fmt::Debug for ViemWalletClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ViemWalletClient").finish()
     }
 }
