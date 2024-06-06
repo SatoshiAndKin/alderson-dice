@@ -39,7 +39,11 @@ impl ViemWallet {
     }
 
     /// TODO: return something that can be used to cancel the subscription
-    pub fn watch_heads(&self, set_watch_heads: WriteSignal<Option<HashMap<String, JsValue>>>) {
+    pub fn watch_heads(
+        &self,
+        set_watch_heads: WriteSignal<Option<HashMap<String, JsValue>>>,
+        emit_missed: bool,
+    ) {
         let closure = Closure::wrap(Box::new(move |block_header: JsValue| {
             let block_header = block_header
                 .dyn_into::<Object>()
@@ -69,7 +73,8 @@ impl ViemWallet {
 
         // TODO: use bindings from the typescript types
         Reflect::set(&arguments, &"onBlock".into(), &closure).expect("setting onBlock");
-        Reflect::set(&arguments, &"emitMissed".into(), &true.into()).expect("setting emitMissed");
+        Reflect::set(&arguments, &"emitMissed".into(), &emit_missed.into())
+            .expect("setting emitMissed");
         Reflect::set(&arguments, &"emitOnBegin".into(), &true.into()).expect("setting emitOnBegin");
 
         let watch_blocks_fn = Reflect::get(&self.public_client, &"watchBlocks".into())

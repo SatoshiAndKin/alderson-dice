@@ -39,7 +39,8 @@ fn App() -> impl IntoView {
     let (wallet, set_wallet) = create_signal(Some(defaultWallet.clone()));
     let (latest_block_head, set_latest_block_header) = create_signal(None);
 
-    defaultWallet.watch_heads(set_latest_block_header);
+    // TODO: eventually emit_missed should be a user option
+    defaultWallet.watch_heads(set_latest_block_header, false);
 
     let announce_provider_callback = Closure::wrap(Box::new(move |event: web_sys::CustomEvent| {
         let detail = event.detail();
@@ -126,7 +127,7 @@ fn App() -> impl IntoView {
 
                         // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
 
-                        wallet.watch_heads(set_latest_block_header);
+                        wallet.watch_heads(set_latest_block_header, false);
                     }
                 }
 
@@ -179,15 +180,14 @@ fn App() -> impl IntoView {
                     // we call dispatch because we might start with the wallet already being connected. i don't love that
                     switch_chain.dispatch(dispatch_args);
                     view! {
-                        <div>"chain_id: "{chain_id}</div>
                         // TODO: should this be a button that we can click to disconnect?
                         <div>"Successfully Connected to Arbitrum"</div>
                     }.into_view()
                 } else {
                     view! {
-                        <div>"wrong chain_id: "{chain_id}</div>
-
                         // a button that requests the arbitrum provider when clicked
+                        // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
+                        // TODO: should also let the user use other wallets like with walletconnect
                         <div>
                             <button
                                 on:click=move |_| switch_chain.dispatch(dispatch_args.clone())
@@ -214,7 +214,6 @@ fn App() -> impl IntoView {
 
         <Show
             when=move || { !accounts().is_empty() }
-            fallback=|| view! { <article>"No accounts"</article> }
         >
             <!-- "TODO: show accounts as an actual list" -->
             <!-- "TODO: disconnect button" -->
@@ -249,12 +248,13 @@ fn App() -> impl IntoView {
 #[component]
 fn UnsupportedBrowser() -> impl IntoView {
     view! {
-        <p>
-            "Your browser is unsupported. No cryptocurrency wallet found. Please use the "
+        <article>
+            "Your browser is missing a cryptocurrency wallet extension. Please use the "
             <a href="https://www.coinbase.com/wallet">"Coinbase Wallet app"</a>
-            " or the "
+            " or an extension like the "
             <a href="https://frame.sh">"Frame browser extension"</a>.
-        </p>
+            "Support for wallet connect and other external wallets is in development."
+        </article>
     }
 }
 
