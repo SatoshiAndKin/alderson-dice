@@ -222,21 +222,36 @@ fn App() -> impl IntoView {
             when=move || { latest_block_head().is_some() }
         >
             <article>
-                "Block Number: "
-                {move || {
-                    let latest_block_head = latest_block_head().expect("no block head");
+                <div>
+                    "Block Number: "
+                    {move || {
+                        // TODO: this should be a component or something like that
+                        let latest_block_head = latest_block_head().expect("no block head");
 
-                    let num = latest_block_head.get("number").expect("no block num").clone();
+                        let num = latest_block_head.get("number").expect("no block num").clone();
 
-                    let num = num.dyn_into::<BigInt>().expect("num is bigint");
+                        let num = num.dyn_into::<BigInt>().expect("num is bigint");
 
-                    format!("{}", num.to_string(10).unwrap())
-                }}
+                        format!("{}", num.to_string(10).unwrap())
+                    }}
+                </div>
+                <div>
+                    "Block Age: "
+                    // TODO: component for the block age
+                    "???"
+                </div>
+                <div>
+                    "Block Hash: "
+                    // TODO: component for the block hash
+                    "???"
+                </div>
             </article>
 
-            // TODO: component for block age
-
-            // TODO: component for the game's current bag according to the current block
+            <article>
+                "This block's dice: "
+                // TODO: component for the game's current bag according to the current block
+                "???"
+            </article>
         </Show>
 
         <Show
@@ -288,26 +303,53 @@ fn App() -> impl IntoView {
             // TODO: i wish wallets had better support for linking multiple accounts
 
             <article>
-                // TODO: show accounts as an actual list
-                "Accounts: "
-                {accounts}
+            // TODO: show accounts as an actual list
+            "Accounts: "
+            {accounts}
             </article>
 
+            // TODO: component for seeing favorite dice
+            // TODO: component for choosing favorite dice
+            <article>
+                "Favorite Dice: "
+                "???"
+            </article>
+
+            <article>
+            "Balances: "
             // TODO: component for balances
-
-            // TODO: component for pending transactions
-
-            // TODO: component for transaction history
+                "???"
+            </article>
 
             // TODO: component for buying dice
+            <article>
+                "Buy Dice: "
+                "???"
+            </article>
 
             // TODO: component for selling dice
+            <article>
+                "Sell Dice: "
+                "???"
+            </article>
 
             // TODO: component for returning dice
+            <article>
+                "Return Dice: "
+                "???"
+            </article>
 
-            // TODO: component for seeing favorite dice
+            // TODO: component for pending transactions
+            <article>
+                "Pending Transactions: "
+                "???"
+            </article>
 
-            // TODO: component for choosing favorite dice
+            // TODO: component for transaction history
+            <article>
+                "Transaction History: "
+                "???"
+            </article>
         </Show>
 
         </main>
