@@ -36,8 +36,17 @@ contract DeployV1Script is Script {
         console.log("nft:", address(nft));
 
         // TODO: CREATE2!
-        AldersonDiceGameV1 game =
-            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintDevFee, mintPrizeFee, "ipfs://alderson-dice.eth/dice/");
+        AldersonDiceGameV1 game = new AldersonDiceGameV1(
+            owner,
+            devFund,
+            prizeFund,
+            nft,
+            prizeVault,
+            price,
+            mintDevFee,
+            mintPrizeFee,
+            "ipfs://alderson-dice.eth/dice/"
+        );
 
         console.log("game:", address(game));
 

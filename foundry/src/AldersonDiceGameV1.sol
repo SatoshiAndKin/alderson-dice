@@ -294,10 +294,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // emit ScoreCard(scoreCard);
     }
 
-    function skirmishPVE(address player)
-        public
-        returns (uint8 wins0, uint8 wins1, uint8 ties)
-    {
+    function skirmishPVE(address player) public returns (uint8 wins0, uint8 wins1, uint8 ties) {
         PlayerInfo memory playerInfo = players[player];
 
         // the PVE bag uses easy-to-predict random
@@ -315,10 +312,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     /// @notice compare 2 player's favorite dice
-    function skirmishPlayers(address player0, address player1)
-        public
-        returns (uint8 wins0, uint8 wins1, uint8 ties)
-    {
+    function skirmishPlayers(address player0, address player1) public returns (uint8 wins0, uint8 wins1, uint8 ties) {
         uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);
         uint256[] memory diceBag1 = new uint256[](NUM_DICE_BAG);
 
@@ -383,7 +377,13 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.shuffle(tokenIds);
     }
 
-    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 shares, uint256 _priceWithFees) internal {
+    function _buyDice(
+        LibPRNG.PRNG memory prng,
+        address receiver,
+        uint256 numDice,
+        uint256 shares,
+        uint256 _priceWithFees
+    ) internal {
         PlayerInfo storage playerInfo = players[receiver];
 
         playerInfo.minted += numDice;
@@ -510,7 +510,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     /// @notice deposit tokens without minting any dice. all interest goes to the prize pool and dev fund.
-    function sponsor(address account, uint256 amount) public returns (uint256 /*amount*/, uint256 shares) {
+    function sponsor(address account, uint256 amount) public returns (uint256, /*amount*/ uint256 shares) {
         address(prizeToken).safeTransferFrom(msg.sender, address(this), amount);
 
         // deposit takes the amount of assets

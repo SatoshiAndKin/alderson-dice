@@ -46,8 +46,17 @@ contract AldersonDiceGameV1Test is Test {
 
         // changing price while we run breaks redeeming dice. but it makes tests a bit of a pain. i guess make a helper function for this?
         // how should we allow changing the tokenURI?
-        game =
-            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintDevFee, mintPrizeFee, "ipfs://alderson-dice.eth/dice/");
+        game = new AldersonDiceGameV1(
+            owner,
+            devFund,
+            prizeFund,
+            nft,
+            prizeVault,
+            price,
+            mintDevFee,
+            mintPrizeFee,
+            "ipfs://alderson-dice.eth/dice/"
+        );
 
         nft.upgrade(address(game), false);
     }

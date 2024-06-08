@@ -18,7 +18,9 @@ interface IGameLogic {
 contract AldersonDiceNFT is ERC6909 {
     using LibPRNG for LibPRNG.PRNG;
 
-    event Upgrade(address indexed sender, address indexed oldGameLogic, address indexed newGameLogic, bool allowOldBurn);
+    event Upgrade(
+        address indexed sender, address indexed oldGameLogic, address indexed newGameLogic, bool allowOldBurn
+    );
 
     IGameLogic public gameLogic;
 
