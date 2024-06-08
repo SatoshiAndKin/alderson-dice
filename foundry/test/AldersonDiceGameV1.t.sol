@@ -30,7 +30,6 @@ contract AldersonDiceGameV1Test is Test {
         devFund = makeAddr("devFund");
         prizeFund = makeAddr("prizeFund");
 
-
         prizeVault = YearnVaultV3(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
 
         prizeToken = ERC20(prizeVault.asset());
@@ -50,7 +49,7 @@ contract AldersonDiceGameV1Test is Test {
         game =
             new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintDevFee, mintPrizeFee, "ipfs://alderson-dice.eth/dice/");
 
-        nft.upgrade(address(game));
+        nft.upgrade(address(game), false);
     }
 
     function test_buySomeDice() public {

@@ -186,7 +186,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function upgrade(address _newGameLogic) public onlyOwner {
-        nft.upgrade(_newGameLogic);
+        nft.upgrade(_newGameLogic, true);
     }
 
     function setTokenURIPrefix(string memory _tokenURIPrefix) public onlyOwner {

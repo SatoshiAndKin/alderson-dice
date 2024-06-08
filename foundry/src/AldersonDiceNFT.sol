@@ -18,12 +18,12 @@ interface IGameLogic {
 contract AldersonDiceNFT is ERC6909 {
     using LibPRNG for LibPRNG.PRNG;
 
-    event Upgrade(address newGameLogic);
+    event Upgrade(address indexed sender, address indexed oldGameLogic, address indexed newGameLogic, bool allowOldBurn);
 
     IGameLogic public gameLogic;
 
     /// keep track of old game logic so that they can keep the ability to burn. otherwise tokens could be stuck!
-    mapping(address => bool) public oldGameLogic;
+    mapping(address => bool) public allowedBurners;
 
     // TODO: these increase the gas cost noticeably
     uint256 public totalSupply;
@@ -38,8 +38,8 @@ contract AldersonDiceNFT is ERC6909 {
         _;
     }
 
-    modifier anyGameLogic() {
-        require(msg.sender == address(gameLogic) || oldGameLogic[msg.sender], "!auth");
+    modifier onlyBurners() {
+        require(msg.sender == address(gameLogic) || allowedBurners[msg.sender], "!auth");
         _;
     }
 
@@ -72,13 +72,18 @@ contract AldersonDiceNFT is ERC6909 {
     }
 
     // TODO: two-phase commit
-    function upgrade(address _newGameLogic) external onlyGameLogic {
+    function upgrade(address _newGameLogic, bool allowOldBurn) external onlyGameLogic {
+        address oldGameLogic = address(gameLogic);
+
         // keep track of the old game logic so that it can still burn tokens
-        oldGameLogic[address(gameLogic)] = true;
+        // TODO: allow old game logic to remove itself once it is empty?
+        if (allowOldBurn) {
+            allowedBurners[oldGameLogic] = true;
+        }
 
         gameLogic = IGameLogic(_newGameLogic);
 
-        emit Upgrade(_newGameLogic);
+        emit Upgrade(msg.sender, oldGameLogic, _newGameLogic, allowOldBurn);
     }
 
     function mint(address receiver, uint256[] calldata tokenIds, uint256[] calldata amounts)
@@ -114,7 +119,7 @@ contract AldersonDiceNFT is ERC6909 {
     /// @dev this seems dangerous. be careful to not lock up any underlying assets!
     function burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts)
         external
-        anyGameLogic
+        onlyBurners
         returns (uint256 burned)
     {
         uint256 length = tokenIds.length;
