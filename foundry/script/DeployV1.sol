@@ -10,6 +10,9 @@ contract DeployV1Script is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
+        bytes32 saltNft = vm.envBytes32("SALT_NFT");
+        bytes32 saltGame = vm.envBytes32("SALT_GAME");
+
         // TODO: derive from the deployer private key?
         address owner = vm.envAddress("DEPLOYER");
 
@@ -21,22 +24,19 @@ contract DeployV1Script is Script {
 
         ERC20 prizeToken = ERC20(prizeVault.asset());
 
-        /// @notice the base dice value
-        /// @notice due to rounding errors depositing and withdrawing from vaults, this might not be the exact value
+        /// dice can be redeemed for ~1 token
         uint256 price = 10 ** prizeToken.decimals();
 
-        // 50 cents to the devFund
+        // 0.50 tokens to the devFund
         uint256 mintDevFee = price / 2;
-        // 50 cents to the prizeFund
+        // 0.50 tokens to the prizeFund
         uint256 mintPrizeFee = mintDevFee;
 
-        // TODO: CREATE2!
-        AldersonDiceNFT nft = new AldersonDiceNFT(owner);
+        AldersonDiceNFT nft = new AldersonDiceNFT{salt: saltNft}(owner);
 
         console.log("nft:", address(nft));
 
-        // TODO: CREATE2!
-        AldersonDiceGameV1 game = new AldersonDiceGameV1(
+        AldersonDiceGameV1 game = new AldersonDiceGameV1{salt: saltGame}(
             owner,
             devFund,
             prizeFund,
