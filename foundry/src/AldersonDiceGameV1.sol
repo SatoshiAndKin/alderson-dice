@@ -20,26 +20,10 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     uint8 public constant NUM_ROLLS = 10;
     uint8 public constant NUM_DICE_BAG = 12;
 
-    // TODO: gas golf this
-    struct PlayerInfo {
-        uint256 minted;
-        // // TODO: track this?
-        // uint256 burned;
-        // // TODO: how should we do this? we don't need it yet but a later version will
-        // uint64 wins;
-        // uint64 losses;
-        // uint64 ties;
-
-        // TODO: the dice bags should be an ERC721 nft instead of a player only having one
-        // TODO: this is too simple. think more about this. probably have "tournament" contracts with blinding and other cool things
-        // TODO: let people use a contract to pick from the dice bag?
-        uint256[NUM_DICE_BAG] favoriteDice;
-    }
-
-    event FavoriteDice(address player, uint256[NUM_DICE_BAG] dice);
+    event FavoriteDice(address indexed player, uint256[NUM_DICE_BAG] dice);
 
     event Fees(
-        address player,
+        address indexed player,
         uint256 devFundAmount,
         uint256 prizePoolShares,
         uint256 totalDiceValue,
@@ -49,7 +33,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     event SetMintDevFee(uint256 newFee);
     event SetMintPrizeFee(uint256 newFee);
 
-    event Sponsored(address account, uint256 amount, uint256 balance, uint256 total);
+    event Sponsored(address indexed sender, address indexed account, uint256 amount, uint256 balance, uint256 total);
 
     AldersonDiceNFT public immutable nft;
 
@@ -88,6 +72,22 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     /// @dev the index is the "color" of the die
     DieColor[NUM_COLORS] public dice;
+
+    /// @dev TODO: gas golf this
+    struct PlayerInfo {
+        uint256 minted;
+        // // TODO: track this?
+        // uint256 burned;
+        // // TODO: how should we do this? we don't need it yet but a later version will
+        // uint64 wins;
+        // uint64 losses;
+        // uint64 ties;
+
+        // TODO: the dice bags should be an ERC721 nft instead of a player only having one
+        // TODO: this is too simple. think more about this. probably have "tournament" contracts with blinding and other cool things
+        // TODO: let people use a contract to pick from the dice bag?
+        uint256[NUM_DICE_BAG] favoriteDice;
+    }
 
     mapping(address => PlayerInfo) public players;
 
@@ -498,7 +498,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         sponsorships[account] += amount;
         totalSponsorships += amount;
 
-        emit Sponsored(account, amount, sponsorships[account], totalSponsorships);
+        emit Sponsored(msg.sender, account, amount, sponsorships[account], totalSponsorships);
 
         return (amount, shares);
     }
