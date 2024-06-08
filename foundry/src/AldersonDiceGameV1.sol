@@ -172,14 +172,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         tokenURIPrefix = _tokenURIPrefix;
     }
 
-    function currentBag() public returns (uint256[] memory bag) {
+    function currentBag() public view returns (uint256[] memory bag) {
         LibPRNG.PRNG memory prng = blockPrng();
 
         bag = currentBag(prng, NUM_DICE_BAG);
     }
 
     /// @notice a random bag currently available for purchase. this changes every block
-    function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public returns (uint256[] memory bag) {
+    function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public pure returns (uint256[] memory bag) {
         (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomDice(prng, numDice);
 
         bag = new uint256[](numDice);
@@ -265,6 +265,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     function skirmishPVE(LibPRNG.PRNG memory prng, address player)
         public
+        view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         PlayerInfo memory playerInfo = players[player];
@@ -305,10 +306,11 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     function randomDice(LibPRNG.PRNG memory prng, uint256 numDice)
         public
-        
+        pure
         returns (uint256[] memory tokenIds, uint256[] memory amounts)
     {
         uint256 sum = 0;
+
 
         // TODO: this should actually be NUM_DICE.
         // TODO: modify this distribution so that dice in higher tiers are more rare?
@@ -482,15 +484,17 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     /// @notice thank you for your sponsorship
     /// @dev todo? have an approval system for this?
-    function withdrawSponsership(uint256 amount) public {
-        uint256 maxAmount = sponsorships[msg.sender];
+    function endSponsership(address who, uint256 amount) public {
+        require(who == msg.sender || nft.isOperator(who, msg.sender), "!auth");
 
+        uint256 maxAmount = sponsorships[who];
         require(amount <= maxAmount, "!bal");
 
-        sponsorships[msg.sender] -= amount;
-        totalSponsorships -= amount;
-
         uint256 shares = vaultToken.previewWithdraw(amount);
+        require(shares > 0, "!shares");
+
+        sponsorships[who] -= amount;
+        totalSponsorships -= amount;
 
         // withdraw takes the amount of assets
         // we leave the shares in the vault because it saves gas and they can withdraw if they want to
