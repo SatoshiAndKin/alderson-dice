@@ -199,8 +199,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         tokenURIPrefix = _tokenURIPrefix;
     }
 
+    /// @notice the bag stays the same for 10 blocks
     function currentBag() public view returns (uint256[] memory bag) {
-        LibPRNG.PRNG memory prng = numberPrng(block.number);
+        LibPRNG.PRNG memory prng = numberPrng(block.number / 10);
 
         bag = currentBag(prng, NUM_DICE_BAG);
     }
@@ -262,7 +263,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
-        LibPRNG.PRNG memory hashPrng = blockhashPrng();
+        LibPRNG.PRNG memory hashPrng = prevrandaoPrng();
 
         uint256 bagSize = diceBag0.length;
 
@@ -446,6 +447,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         emit FavoriteDice(player, playerInfo.favoriteDice);
     }
 
+    /// @notice the bag stays the same for 10 blocks
     function buyNumDice(address receiver, uint256 numDice) public {
         require(numDice > 0, "!dice");
 
@@ -459,7 +461,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         uint256 shares = vaultToken.deposit(cost, address(this));
 
         // we actually want the dice purchased to be predictable. i think that will be a fun mini-game for people
-        LibPRNG.PRNG memory prng = numberPrng(block.number);
+        LibPRNG.PRNG memory prng = numberPrng(block.number / 10);
 
         _buyDice(prng, receiver, numDice, shares, priceWithFees_);
     }
@@ -502,7 +504,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     /// @dev TODO: THIS IS PREDICTABLE (but not as easily as block number)! KEEP THINKING ABOUT THIS
     /// I think predictable is fine for most of this game's random. I want players able to plan ahead some.
     /// @dev TODO: include the player addresses? i dont actually think a player controlled seed input is a good idea
-    function blockhashPrng() public view returns (LibPRNG.PRNG memory prng) {
+    function prevrandaoPrng() public view returns (LibPRNG.PRNG memory prng) {
         prng.seed(uint256(block.prevrandao));
     }
 
