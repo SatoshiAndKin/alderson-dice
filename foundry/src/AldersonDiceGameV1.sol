@@ -172,14 +172,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         tokenURIPrefix = _tokenURIPrefix;
     }
 
-    function currentBag() public view returns (uint256[] memory bag) {
+    function currentBag() public returns (uint256[] memory bag) {
         LibPRNG.PRNG memory prng = blockPrng();
 
         bag = currentBag(prng, NUM_DICE_BAG);
     }
 
     /// @notice a random bag currently available for purchase. this changes every block
-    function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public pure returns (uint256[] memory bag) {
+    function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public returns (uint256[] memory bag) {
         (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomDice(prng, numDice);
 
         bag = new uint256[](numDice);
@@ -264,7 +264,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function skirmishPVE(LibPRNG.PRNG memory prng, address player)
-        public view
+        public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         PlayerInfo memory playerInfo = players[player];
@@ -305,7 +305,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     function randomDice(LibPRNG.PRNG memory prng, uint256 numDice)
         public
-        pure
+        
         returns (uint256[] memory tokenIds, uint256[] memory amounts)
     {
         uint256 sum = 0;
@@ -316,23 +316,32 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         amounts = new uint256[](NUM_COLORS);
 
         // Generate random values until the sum reaches or exceeds x
-        // TODO: don't cap at NUM_COLORS. have multiple tiers of dice
+        // TODO: don't cap at NUM_COLORS. have multiple tiers of dice. maybe have seasons based on the mint week
         uint256 lastId = NUM_COLORS - 1;
         for (uint256 i = 0; i < lastId; i++) {
             // we increment by 1 so that "0" can be used a null value in mappings and lists (like the favorites list of a new account)
             tokenIds[i] = i + 1;
+
+            if (tokenIds[i] == 0) {
+                revert("bug 1");
+            }
 
             uint256 remaining = numDice - sum;
 
             amounts[i] = prng.uniform(remaining);
             sum += amounts[i];
 
-            if (sum >= numDice) {
+            if (sum > numDice) {
+                revert("bug 2");
+            }
+
+            if (sum == numDice) {
                 break;
             }
         }
 
         // Assign the remaining value to the last element
+        tokenIds[lastId] = lastId + 1;
         amounts[lastId] = numDice - sum;
 
         prng.shuffle(tokenIds);
