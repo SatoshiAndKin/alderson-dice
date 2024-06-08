@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.25;
+pragma solidity 0.8.26;
 
 import {ERC4626} from "@solady/tokens/ERC4626.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
@@ -17,7 +17,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     uint256 public constant NUM_COLORS = 5;
     uint256 public constant NUM_SIDES = 6;
-    uint8 public constant NUM_ROUNDS = 10;
+    uint8 public constant NUM_ROLLS = 10;
     uint8 public constant NUM_DICE_BAG = 12;
 
     // we could just look-up odds in a table, but i think dice with pips are a lot more fun
@@ -56,11 +56,13 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         uint256 totalSponsorships
     );
 
-    // TODO: this should use console.log instead
-    event Pips(uint256 color0, uint32[NUM_SIDES] pips0, uint256 color1, uint32[NUM_SIDES] pips1);
+    // // TODO: this should use console.log instead
+    // event Pips(uint256 color0, uint32[NUM_SIDES] pips0, uint256 color1, uint32[NUM_SIDES] pips1);
 
-    // TODO: this should use console.log instead
-    event Skirmish(uint256 side0, uint256 side1, uint32 roll0, uint32 roll1);
+    // // TODO: this should use console.log instead
+    // event Skirmish(uint256 side0, uint256 side1, uint32 roll0, uint32 roll1);
+
+    event Sponsored(address account, uint256 amount, uint256 balance, uint256 total);
 
     AldersonDiceNFT public immutable nft;
 
@@ -207,13 +209,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
             uint256 side0 = rollDie(prng);
             uint256 side1 = rollDie(prng);
 
-            emit Pips(color0, dice0.pips, color1, dice1.pips);
+            // // TODO: use console.log?
+            // emit Pips(color0, dice0.pips, color1, dice1.pips);
 
             uint32 roll0 = dice0.pips[side0];
             uint32 roll1 = dice1.pips[side1];
 
-            // TODO: use console.log?
-            emit Skirmish(side0, side1, roll0, roll1);
+            // // TODO: use console.log?
+            // emit Skirmish(side0, side1, roll0, roll1);
 
             if (roll0 > roll1) {
                 wins0++;
@@ -227,26 +230,26 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // emit ScoreCard(scoreCard);
     }
 
-    function skirmishBags(LibPRNG.PRNG memory prng, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 rounds)
+    function skirmishBags(LibPRNG.PRNG memory prng, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 draws)
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         uint256 bagSize = diceBag0.length;
 
         require(bagSize == diceBag1.length, "Dice bags must be the same length");
-        require(bagSize >= rounds, "need more dice for this many rounds");
+        require(bagSize >= draws, "need more dice for this many draws");
 
-        // shuffle both sets of dice
-        // TODO: just shuffle one bag? with a good shuffle function, this is equivalent
+        // randomize the dice
+        // TODO: just shuffle one bag? with a good shuffle function, this is equivalent. its not nearly as fun to watch though
         prng.shuffle(diceBag0);
-        // prng.shuffle(diceBag1);
+        prng.shuffle(diceBag1);
 
-        for (uint256 i = 0; i < rounds; i++) {
+        for (uint256 i = 0; i < draws; i++) {
             uint256 color0 = color(diceBag0[i]);
             uint256 color1 = color(diceBag1[i]);
 
             // TODO: maybe we do want the diceId passed to this so we can use it for tie breaking or something
-            (uint8 w0, uint8 w1,) = skirmishColors(prng, color0, color1, NUM_ROUNDS);
+            (uint8 w0, uint8 w1,) = skirmishColors(prng, color0, color1, NUM_ROLLS);
 
             if (w0 > w1) {
                 wins0++;
@@ -275,7 +278,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
             diceBag0[i] = playerInfo.favoriteDice[i];
         }
 
-        (wins0, wins1, ties) = skirmishBags(prng, diceBag0, diceBag1, NUM_ROUNDS);
+        (wins0, wins1, ties) = skirmishBags(prng, diceBag0, diceBag1, NUM_ROLLS);
     }
 
     /// @notice compare 2 player's favorite dice
@@ -291,7 +294,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
             diceBag1[i] = players[player1].favoriteDice[i];
         }
 
-        (wins0, wins1, ties) = skirmishBags(prng, diceBag0, diceBag1, NUM_ROUNDS);
+        (wins0, wins1, ties) = skirmishBags(prng, diceBag0, diceBag1, NUM_ROLLS);
     }
 
     /// @notice returns the faceId of a given die being rolled
@@ -435,12 +438,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         uint256 burned = nft.burn(player, diceIds, diceAmounts);
 
-        // half was given to the devFund and prizeFund. that introduces some rounding errors (and theres usually 1 wei rounding error too)
+        // some was given to the devFund and prizeFund. that introduces some rounding errors (and theres usually 1 wei rounding error too)
         refundAssets = FixedPointMathLib.fullMulDiv(totalDiceValue, burned, totalSupply);
 
-        // TODO: due to rounding errors, i don't think we actually have this much! i think we need 4696's math here to save us
-        // that, or we calculate how many shares
-        // withdraw takes the amount of assets
         vaultToken.withdraw(refundAssets, player, address(this));
 
         totalDiceValue -= refundAssets;
@@ -461,12 +461,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // deposit takes the amount of assets
         uint256 shares = vaultToken.deposit(amount, address(this));
 
-        // corrent any rounding errors
+        // correct any rounding errors
         // redeem takes the amount of shares
         amount = vaultToken.previewRedeem(shares);
 
         sponsorships[account] += amount;
         totalSponsorships += amount;
+
+        emit Sponsored(account, amount, sponsorships[account], totalSponsorships);
     }
 
     /// @notice thank you for your sponsorship
@@ -517,7 +519,11 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     function sweepPrizeFund() public returns (uint256 shares) {
         shares = prizeSharesAvailable();
 
-        vaultToken.transfer(prizeFund, shares);
+        if (shares > 0) {
+            vaultToken.transfer(prizeFund, shares);
+        }
+
+        // TODO: i think in order to prevent some rounding attacks, we might actaully want prizeFund to pull the funds and do some math
     }
 
     /*

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.25;
+pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {ERC6909} from "@solady/tokens/ERC6909.sol";
@@ -22,6 +22,9 @@ contract AldersonDiceNFT is ERC6909 {
 
     IGameLogic public gameLogic;
 
+    /// keep track of old game logic so that they can keep the ability to burn. otherwise tokens could be stuck!
+    mapping(address => bool) public oldGameLogic;
+
     // TODO: these increase the gas cost noticeably
     uint256 public totalSupply;
     mapping(uint256 => uint256) public tokenSupply;
@@ -32,6 +35,11 @@ contract AldersonDiceNFT is ERC6909 {
 
     modifier onlyGameLogic() {
         require(msg.sender == address(gameLogic), "!auth");
+        _;
+    }
+
+    modifier anyGameLogic() {
+        require(msg.sender == address(gameLogic) || oldGameLogic[msg.sender], "!auth");
         _;
     }
 
@@ -65,6 +73,9 @@ contract AldersonDiceNFT is ERC6909 {
 
     // TODO: two-phase commit
     function upgrade(address _newGameLogic) external onlyGameLogic {
+        // keep track of the old game logic so that it can still burn tokens
+        oldGameLogic[address(gameLogic)] = true;
+
         gameLogic = IGameLogic(_newGameLogic);
 
         emit Upgrade(_newGameLogic);
@@ -85,7 +96,9 @@ contract AldersonDiceNFT is ERC6909 {
             id = tokenIds[i];
             amount = amounts[i];
 
-            if (id == 0 || amount == 0) {
+            require(id > 0, "zero");
+
+            if (amount == 0) {
                 continue;
             }
 
@@ -98,10 +111,10 @@ contract AldersonDiceNFT is ERC6909 {
         totalSupply += minted;
     }
 
-    // this seems dangerous
+    /// @dev this seems dangerous. be careful to not lock up any underlying assets!
     function burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts)
         external
-        onlyGameLogic
+        anyGameLogic
         returns (uint256 burned)
     {
         uint256 length = tokenIds.length;
