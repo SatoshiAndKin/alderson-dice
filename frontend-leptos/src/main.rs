@@ -252,6 +252,12 @@ fn App() -> impl IntoView {
                 // TODO: component for the game's current bag according to the current block
                 "???"
             </article>
+
+            <article>
+                "Other Account's Dice: "
+                // TODO: component to prompt for accounts to watch
+                "???"
+            </article>
         </Show>
 
         <Show
