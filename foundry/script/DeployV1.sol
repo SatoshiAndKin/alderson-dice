@@ -5,15 +5,13 @@ import "forge-std/Script.sol";
 import "../src/AldersonDiceGameV1.sol";
 import {YearnVaultV3} from "../src/YearnVaultV3.sol";
 
-contract AldersonDiceGameV1Script is Script {
+contract DeployV1Script is Script {
     function run() external {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
 
-        // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        // vm.startBroadcast(deployerPrivateKey);
-
-        // TODO: derive from the deployer private key
-        address owner = address(this);
-        vm.startBroadcast(owner);
+        // TODO: derive from the deployer private key?
+        address owner = vm.envAddress("DEPLOYER");
 
         // TODO: read from env
         address devFund = owner;
@@ -32,13 +30,18 @@ contract AldersonDiceGameV1Script is Script {
         // 50 cents to the prizeFund
         uint256 mintPrizeFee = mintDevFee;
 
+        // TODO: CREATE2!
         AldersonDiceNFT nft = new AldersonDiceNFT(owner);
 
-        // TODO: mintFee that can be changed instead of the math like we have now
+        console.log("nft:", address(nft));
+
+        // TODO: CREATE2!
         AldersonDiceGameV1 game =
             new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintDevFee, mintPrizeFee, "ipfs://alderson-dice.eth/dice/");
 
-        nft.upgrade(address(game));
+        console.log("game:", address(game));
+
+        nft.upgrade(address(game), false);
 
         vm.stopBroadcast();
     }
