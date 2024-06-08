@@ -1,5 +1,8 @@
-import { http, custom, createPublicClient, createWalletClient, fallback } from 'viem'
-import { arbitrum, base, mainnet } from 'viem/chains'
+import { Abi, getAbiItem, http, custom, createPublicClient, createWalletClient, fallback, getContract } from 'viem'
+import { arbitrum, base, localhost, mainnet } from 'viem/chains'
+
+import { abi as gameAbi } from "./AldersonDiceGameV1.json";
+import { abi as nftAbi } from "./AldersonDiceNFT.json";
 
 export function hello() {
   return 'Hello, world!';
@@ -9,23 +12,27 @@ function chainIdToChain(chainId) {
   switch (chainId) {
     case "0x1":
       return mainnet;
-    case "0xa4b1":
-      return arbitrum;
+    case "0x1337":
+      return localhost;
     case "0x2105":
       return base;
+    case "0xa4b1":
+      return arbitrum;
     default: throw new Error(`Unsupported chain ID: ${chainId}`)
   }
 }
 
 export function createPublicClientForChain(chainId, eip1193_provider) {
+  // TODO: allow customizing this. dev we want 8545. prod we want undefined
+  const fallbackUrl = "http://127.0.0.1:8545";
+
   let transport;
   if (eip1193_provider === undefined) {
-    transport = http();
+    transport = http(fallbackUrl);
   } else {
-    // TODO: with a fallback to http
     transport = fallback([
       custom(eip1193_provider),
-      http(),
+      http(fallbackUrl),
     ]);
   }
 
@@ -37,8 +44,6 @@ export function createPublicClientForChain(chainId, eip1193_provider) {
     transport
   });
 
-  // globalThis.window.publicClient = publicClient;
-
   return publicClient;
 };
 
@@ -48,7 +53,45 @@ export function createWalletClientForChain(chainId, eip1193Provider) {
     transport: custom(eip1193Provider)
   });
 
-  // globalThis.window.walletClient = walletClient;
-
   return walletClient;
 };
+
+export function nftContract(publicClient, walletClient) {
+  let client;
+
+  if (walletClient === undefined) {
+    client = publicClient;
+  } else {
+    client = {
+      public: publicClient,
+      wallet: walletClient,
+    };
+  }
+
+  return getContract({
+    // TODO: probably get this from build scripts in the rust pipeline
+    address: '0xFFA4DB58Ad08525dFeB232858992047ECab26e95',
+    abi: nftAbi,
+    client,
+  });
+}
+
+export function gameContract(publicClient, walletClient) {
+  let client;
+
+  if (walletClient === undefined) {
+    client = publicClient;
+  } else {
+    client = {
+      public: publicClient,
+      wallet: walletClient,
+    };
+  }
+
+  return getContract({
+    // TODO: probably get this from build scripts in the rust pipeline
+    address: '0xb64d06889fd4b7cea0Df8B5e53f782DA9FeB2237',
+    abi: gameAbi,
+    client,
+  });
+}
