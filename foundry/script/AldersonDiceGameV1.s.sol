@@ -23,14 +23,20 @@ contract AldersonDiceGameV1Script is Script {
 
         ERC20 prizeToken = ERC20(prizeVault.asset());
 
-        uint256 mintFee = 10 ** prizeToken.decimals() / 2;
+        /// @notice the base dice value
+        /// @notice due to rounding errors depositing and withdrawing from vaults, this might not be the exact value
         uint256 price = 10 ** prizeToken.decimals();
+
+        // 50 cents to the devFund
+        uint256 mintDevFee = price / 2;
+        // 50 cents to the prizeFund
+        uint256 mintPrizeFee = mintDevFee;
 
         AldersonDiceNFT nft = new AldersonDiceNFT(owner);
 
         // TODO: mintFee that can be changed instead of the math like we have now
         AldersonDiceGameV1 game =
-            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, "ipfs://alderson-dice.eth/dice/");
+            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintDevFee, mintPrizeFee, "ipfs://alderson-dice.eth/dice/");
 
         nft.upgrade(address(game));
 

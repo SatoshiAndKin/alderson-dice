@@ -20,15 +20,6 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     uint8 public constant NUM_ROLLS = 10;
     uint8 public constant NUM_DICE_BAG = 12;
 
-    // we could just look-up odds in a table, but i think dice with pips are a lot more fun
-    // TODO: be more consistent about "color" vs "type" vs "name"
-    // the index is the "color" of the die
-    struct DieInfo {
-        uint32[NUM_SIDES] pips;
-        string name;
-        string symbol;
-    }
-
     // TODO: gas golf this
     struct PlayerInfo {
         uint256 minted;
@@ -47,7 +38,6 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     event FavoriteDice(address player, uint256[NUM_DICE_BAG] dice);
 
-    // event ScoreCard(string x);
     event Fees(
         address player,
         uint256 devFundAmount,
@@ -56,11 +46,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         uint256 totalSponsorships
     );
 
-    // // TODO: this should use console.log instead
-    // event Pips(uint256 color0, uint32[NUM_SIDES] pips0, uint256 color1, uint32[NUM_SIDES] pips1);
-
-    // // TODO: this should use console.log instead
-    // event Skirmish(uint256 side0, uint256 side1, uint32 roll0, uint32 roll1);
+    event SetMintDevFee(uint256 newFee);
+    event SetMintPrizeFee(uint256 newFee);
 
     event Sponsored(address account, uint256 amount, uint256 balance, uint256 total);
 
@@ -83,20 +70,24 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     string internal tokenURIPrefix;
     address public devFund;
     address public prizeFund;
-    uint256 public immutable price;
+
+    /// @notice extra cost to mint a die. goes to the dev fund
+    uint256 public mintDevFee;
+    /// @notice extra cost to mint a die. goes directly to the prize pool
+    uint256 public mintPrizeFee;
 
     /// @notice due to rounding of shares and the underlying token, this is an estimate. it should be close
     uint256 public immutable refundPrice;
 
-    // TODO: store in an immutable instead?
-    DieInfo[NUM_COLORS] public dice;
+    /// @notice we could just look-up odds in a table, but i think dice with pips are a lot more fun
+    struct DieColor {
+        uint32[NUM_SIDES] pips;
+        string name;
+        string symbol;
+    }
 
-    // // TODO: tracking this on chain seems like too much state. but maybe we could use it for something. think more before adding this
-    // struct Dice {
-    //     uint256 wins;
-    //     uint256 ties;
-    //     uint256 losses;
-    // }
+    /// @dev the index is the "color" of the die
+    DieColor[NUM_COLORS] public dice;
 
     mapping(address => PlayerInfo) public players;
 
@@ -107,6 +98,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         AldersonDiceNFT _nft,
         ERC4626 _vaultToken,
         uint256 _refundPrice,
+        uint256 _mintDevFee,
+        uint256 _mintPrizeFee,
         string memory _tokenURIPrefix
     ) Ownable() {
         require(_refundPrice > 0, "!price");
@@ -117,8 +110,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prizeFund = _prizeFund;
         nft = _nft;
         vaultToken = _vaultToken;
-        price = _refundPrice * 2;
         refundPrice = _refundPrice;
+        mintDevFee = _mintDevFee;
+        mintPrizeFee = _mintPrizeFee;
         tokenURIPrefix = _tokenURIPrefix;
 
         prizeToken = ERC20(vaultToken.asset());
@@ -129,11 +123,11 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // TODO: put this into calldata instead of hard coding it here
         // TODO: what about a "re-roll" face? -1?
         // taking this as calldata would be interesting, but the types get complicated
-        dice[0] = DieInfo([uint32(4), 4, 4, 4, 4, 9], "Red", unicode"🟥");
-        dice[1] = DieInfo([uint32(3), 3, 3, 3, 8, 8], "Yellow", unicode"⭐️");
-        dice[2] = DieInfo([uint32(2), 2, 2, 7, 7, 7], "Blue", unicode"🔷");
-        dice[3] = DieInfo([uint32(1), 1, 6, 6, 6, 6], "Magenta", unicode"💜");
-        dice[4] = DieInfo([uint32(0), 5, 5, 5, 5, 5], "Olive", unicode"🫒");
+        dice[0] = DieColor([uint32(4), 4, 4, 4, 4, 9], "Red", unicode"🟥");
+        dice[1] = DieColor([uint32(3), 3, 3, 3, 8, 8], "Yellow", unicode"⭐️");
+        dice[2] = DieColor([uint32(2), 2, 2, 7, 7, 7], "Blue", unicode"🔷");
+        dice[3] = DieColor([uint32(1), 1, 6, 6, 6, 6], "Magenta", unicode"💜");
+        dice[4] = DieColor([uint32(0), 5, 5, 5, 5, 5], "Olive", unicode"🫒");
     }
 
     // this probably won't ever be needed, but just in case, anyone can set infinite approvals for the vault to take our prize tokens
@@ -153,13 +147,40 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function name(uint256 id) external view returns (string memory) {
-        DieInfo memory die = dice[color(id)];
+        DieColor memory die = dice[color(id)];
 
         return string(abi.encodePacked(die.name, " Alderson Die"));
     }
 
+    /// @notice there might be some rounding errors on this as tokens move through the vault
+    function priceWithFees() public view returns (uint256) {
+        return refundPrice + mintDevFee + mintPrizeFee;
+    }
+
+    function setMintDevFee(uint256 _fee) public onlyOwner {
+        mintDevFee = _fee;
+
+        emit SetMintDevFee(_fee);
+    }
+
+    function setMintPrizeFee(uint256 _fee) public onlyOwner {
+        mintPrizeFee = _fee;
+
+        emit SetMintPrizeFee(_fee);
+    }
+
+    function value(uint256 numDice) public view returns (uint256 refundAssets) {
+        // get the supply before we burn
+        uint256 totalSupply = nft.totalSupply();
+
+        require(numDice <= totalSupply, "!supply");
+
+        // some was given to the devFund and prizeFund. that introduces some rounding errors (and theres usually 1 wei rounding error too)
+        refundAssets = FixedPointMathLib.fullMulDiv(totalDiceValue, numDice, totalSupply);
+    }
+
     function symbol(uint256 id) public view virtual returns (string memory) {
-        DieInfo memory die = dice[color(id)];
+        DieColor memory die = dice[color(id)];
 
         return string(abi.encodePacked("AD", die.symbol));
     }
@@ -202,8 +223,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         public view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
-        DieInfo memory dice0 = dice[color0];
-        DieInfo memory dice1 = dice[color1];
+        DieColor memory dice0 = dice[color0];
+        DieColor memory dice1 = dice[color1];
 
         for (uint16 round = 0; round < rounds; round++) {
             uint256 side0 = rollDie(prng);
@@ -349,23 +370,18 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.shuffle(tokenIds);
     }
 
-    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 shares) internal {
+    function _buyDice(LibPRNG.PRNG memory prng, address receiver, uint256 numDice, uint256 shares, uint256 _priceWithFees) internal {
         PlayerInfo storage playerInfo = players[receiver];
 
         playerInfo.minted += numDice;
 
-        // half the shares are held for the player. dice can be burned to recover half the cost
-        // we MUST do the math on shares to avoid rounding errors!
-        // TODO: instead of half, take a configurable amount?
-        uint256 half_shares = shares / 2;
+        uint256 prizeFundShares = FixedPointMathLib.fullMulDiv(shares, mintPrizeFee, _priceWithFees);
+        uint256 devFundShares = FixedPointMathLib.fullMulDiv(shares, mintDevFee, _priceWithFees);
 
-        // the other half of the shares are split between the prize fund and the dev fund
-        uint256 prizeFundShares = half_shares / 2;
-
-        uint256 devFundShares = shares - half_shares - prizeFundShares;
+        uint256 diceShares = shares - prizeFundShares - devFundShares;
 
         // handle any rounding errors
-        uint256 newDiceValue = vaultToken.previewRedeem(half_shares);
+        uint256 newDiceValue = vaultToken.previewRedeem(diceShares);
         uint256 devFundAmount = vaultToken.previewRedeem(devFundShares);
 
         // the other half of the shares' value (with fixes for rounding errors) are given to the devFund
@@ -420,8 +436,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     function buyNumDice(address receiver, uint256 numDice) public {
         require(numDice > 0, "!dice");
 
-        // no rounding errors are possible with this one
-        uint256 cost = numDice * price;
+        uint256 priceWithFees_ = priceWithFees();
+
+        uint256 cost = numDice * priceWithFees_;
 
         address(prizeToken).safeTransferFrom(msg.sender, address(this), cost);
 
@@ -430,7 +447,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         LibPRNG.PRNG memory prng = blockPrng();
 
-        _buyDice(prng, receiver, numDice, shares);
+        _buyDice(prng, receiver, numDice, shares, priceWithFees_);
     }
 
     /// @notice the player (or an operator) can burn their dice to recover half the cost
@@ -465,21 +482,25 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.seed(block.number);
     }
 
-    /// @notice deposit tokens without mining any dice. all interest goes to the prize pool and dev fund.
-    function sponsor(address account, uint256 amount) public {
+    /// @notice deposit tokens without minting any dice. all interest goes to the prize pool and dev fund.
+    function sponsor(address account, uint256 amount) public returns (uint256 /*amount*/, uint256 shares) {
         address(prizeToken).safeTransferFrom(msg.sender, address(this), amount);
 
         // deposit takes the amount of assets
-        uint256 shares = vaultToken.deposit(amount, address(this));
+        shares = vaultToken.deposit(amount, address(this));
 
         // correct any rounding errors
         // redeem takes the amount of shares
         amount = vaultToken.previewRedeem(shares);
 
+        require(amount > 0, "!amount");
+
         sponsorships[account] += amount;
         totalSponsorships += amount;
 
         emit Sponsored(account, amount, sponsorships[account], totalSponsorships);
+
+        return (amount, shares);
     }
 
     /// @notice thank you for your sponsorship

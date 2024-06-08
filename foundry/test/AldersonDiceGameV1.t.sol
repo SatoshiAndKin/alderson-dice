@@ -30,11 +30,15 @@ contract AldersonDiceGameV1Test is Test {
         devFund = makeAddr("devFund");
         prizeFund = makeAddr("prizeFund");
 
+
         prizeVault = YearnVaultV3(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
 
         prizeToken = ERC20(prizeVault.asset());
 
         uint256 price = 10 ** prizeToken.decimals();
+
+        uint256 mintDevFee = price / 2;
+        uint256 mintPrizeFee = price / 2;
 
         // give enough tokens to buy 100 dice
         deal(address(prizeToken), address(this), 1_000 * price);
@@ -44,7 +48,7 @@ contract AldersonDiceGameV1Test is Test {
         // changing price while we run breaks redeeming dice. but it makes tests a bit of a pain. i guess make a helper function for this?
         // how should we allow changing the tokenURI?
         game =
-            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, "ipfs://alderson-dice.eth/dice/");
+            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintDevFee, mintPrizeFee, "ipfs://alderson-dice.eth/dice/");
 
         nft.upgrade(address(game));
     }
