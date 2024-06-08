@@ -2,14 +2,14 @@
 pragma solidity 0.8.26;
 
 import {Test, console} from "forge-std/Test.sol";
-import {AldersonDiceNFT, AldersonDiceGameV1, ERC20, ERC4626, LibPRNG} from "../src/AldersonDiceGameV1.sol";
+import {AldersonDiceNFT, AldersonDiceGameV0, ERC20, ERC4626, LibPRNG} from "../src/AldersonDiceGameV0.sol";
 import {YearnVaultV3, YearnVaultV3Strategy} from "../src/YearnVaultV3.sol";
 
-contract AldersonDiceGameV1Test is Test {
+contract AldersonDiceGameV0Test is Test {
     using LibPRNG for LibPRNG.PRNG;
 
     AldersonDiceNFT public nft;
-    AldersonDiceGameV1 public game;
+    AldersonDiceGameV0 public game;
 
     address owner;
     address devFund;
@@ -46,7 +46,7 @@ contract AldersonDiceGameV1Test is Test {
 
         // changing price while we run breaks redeeming dice. but it makes tests a bit of a pain. i guess make a helper function for this?
         // how should we allow changing the tokenURI?
-        game = new AldersonDiceGameV1(
+        game = new AldersonDiceGameV0(
             owner,
             devFund,
             prizeFund,

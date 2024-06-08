@@ -2,10 +2,10 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Script.sol";
-import "../src/AldersonDiceGameV1.sol";
+import "../src/AldersonDiceGameV0.sol";
 import {YearnVaultV3} from "../src/YearnVaultV3.sol";
 
-contract DeployV1Script is Script {
+contract DeployV0Script is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
@@ -36,7 +36,7 @@ contract DeployV1Script is Script {
 
         console.log("nft:", address(nft));
 
-        AldersonDiceGameV1 game = new AldersonDiceGameV1{salt: saltGame}(
+        AldersonDiceGameV0 game = new AldersonDiceGameV0{salt: saltGame}(
             owner,
             devFund,
             prizeFund,

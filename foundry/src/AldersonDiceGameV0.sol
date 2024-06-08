@@ -11,7 +11,7 @@ import {FixedPointMathLib} from "@solady/utils/FixedPointMathLib.sol";
 // TODO: use a delegatecall ugpradable contract here? that keeps approvals active and passes the state on. but sometimes passing the state on isn't what we want
 // maybe this should be a 4626 vault too? i think its easier for all the yield to go to the prizeFund and that can decide how to distribute things
 // better to have a "staking" contract for splitting the yield. some to devs. some to prizes. some to dice stakers
-contract AldersonDiceGameV1 is IGameLogic, Ownable {
+contract AldersonDiceGameV0 is IGameLogic, Ownable {
     using SafeTransferLib for address;
     using LibPRNG for LibPRNG.PRNG;
 
