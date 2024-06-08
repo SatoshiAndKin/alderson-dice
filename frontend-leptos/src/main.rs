@@ -224,52 +224,6 @@ fn App() -> impl IntoView {
             </button>
         </article>
 
-        <article>
-            {move || format!("{:?}", public_client())}
-        </article>
-
-        <Show
-            when=move || { latest_block_head().is_some() }
-        >
-            <article>
-                <div>
-                    "Block Number: "
-                    {move || {
-                        // TODO: this should be a component or something like that
-                        let latest_block_head = latest_block_head().expect("no block head");
-
-                        let num = latest_block_head.get("number").expect("no block num").clone();
-
-                        let num = num.dyn_into::<BigInt>().expect("num is bigint");
-
-                        format!("{}", num.to_string(10).unwrap())
-                    }}
-                </div>
-                <div>
-                    "Block Age: "
-                    // TODO: component for the block age
-                    "???"
-                </div>
-                <div>
-                    "Block Hash: "
-                    // TODO: component for the block hash
-                    "???"
-                </div>
-            </article>
-
-            <article>
-                "This block's dice: "
-                // TODO: component for the game's current bag according to the current block
-                "???"
-            </article>
-
-            <article>
-                "Other Account's Dice: "
-                // TODO: component to prompt for accounts to watch
-                "???"
-            </article>
-        </Show>
-
         <Show
             when=move || { provider().is_some() }
             fallback=|| view! { <UnsupportedBrowser/> }
@@ -278,7 +232,7 @@ fn App() -> impl IntoView {
             {
                 let provider: eip1193::EIP1193Provider = provider().unwrap();
 
-                // TODO: don't call chain_id twice?
+                // TODO: don't call chain_id twice? use a resource? is that the right term?
                 let disconnect_chain_args = (provider.clone(), chain_id().clone(), "".to_string());
                 let switch_chain_args = (provider.clone(), chain_id().clone(), ARBITRUM_CHAIN_ID.to_string());
 
@@ -311,16 +265,73 @@ fn App() -> impl IntoView {
             </article>
         </Show>
 
+        // TODO: this should be a resource or maybe an action
+        <article>
+            {move || {
+                if let Some(wallet) = wallet_client().as_ref() {
+                    format!("{:?}", wallet)
+                } else {
+                    format!("{:?}", public_client())
+                }
+            }}
+        </article>
+
+        <Show
+            when=move || { latest_block_head().is_some() }
+        >
+            <article>
+                <div>
+                    "Block Number: "
+                    {move || {
+                        // TODO: this should be a component or something like that
+                        let latest_block_head = latest_block_head().expect("no block head");
+
+                        let num = latest_block_head.get("number").expect("no block num").clone();
+
+                        let num = num.dyn_into::<BigInt>().expect("num is bigint");
+
+                        format!("{}", num.to_string(10).unwrap())
+                    }}
+                </div>
+                <div>
+                    "Block Age: "
+                    // TODO: component for the block age
+                    "???"
+                </div>
+                <div>
+                    "Block Hash: "
+                    // TODO: component for the block hash
+                    "???"
+                </div>
+            </article>
+
+            <article>
+                "Total Dice: "
+                "???"
+            </article>
+
+            <article>
+                "This block's dice: "
+                // TODO: component for the game's current bag according to the current block
+                "???"
+            </article>
+
+            <article>
+                "Other Account's Dice: "
+                // TODO: component to prompt for accounts to watch
+                "???"
+            </article>
+        </Show>
+
         <Show
             when=move || { !accounts().is_empty() }
         >
             // TODO: button to request accounts instead of only doing it on chain switch
             // this saves them having to hit "disconnect" when they want to add multiple accounts
-            // TODO: i wish wallets had better support for linking multiple accounts
 
             <article>
-                // TODO: show accounts as an actual list
-                "Accounts: "
+                // TODO: show accounts as an actual list so they can pick a primary one to manage
+                "Your Accounts: "
                 {accounts}
             </article>
 

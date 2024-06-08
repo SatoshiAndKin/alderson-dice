@@ -1,4 +1,4 @@
-import { Abi, getAbiItem, http, custom, createPublicClient, createWalletClient, fallback, getContract } from 'viem'
+import { Chain, http, custom, createPublicClient, createWalletClient, fallback, getContract } from 'viem'
 import { arbitrum, base, localhost, mainnet } from 'viem/chains'
 
 import { abi as gameAbi } from "./AldersonDiceGameV1.json";
@@ -8,7 +8,7 @@ export function hello() {
   return 'Hello, world!';
 }
 
-function chainIdToChain(chainId) {
+function chainIdToChain(chainId): Chain {
   switch (chainId) {
     case "0x1":
       return mainnet;
@@ -90,7 +90,7 @@ export function gameContract(publicClient, walletClient) {
 
   return getContract({
     // TODO: probably get this from build scripts in the rust pipeline
-    address: '0xb64d06889fd4b7cea0Df8B5e53f782DA9FeB2237',
+    address: '0xcD45DeD0c251B1715FB9C3e72E2cEC2e2fb1E0A9',
     abi: gameAbi,
     client,
   });

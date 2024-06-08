@@ -501,12 +501,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     /// @dev TODO: THIS IS PREDICTABLE (but not as easily as block number)! KEEP THINKING ABOUT THIS
     /// I think predictable is fine for most of this game's random. I want players able to plan ahead some.
+    /// @dev TODO: include the player addresses? i dont actually think a player controlled seed input is a good idea
     function blockhashPrng() public view returns (LibPRNG.PRNG memory prng) {
-        uint256 b = block.number;
-
-        b = uint256(blockhash(b));
-
-        prng.seed(b);
+        prng.seed(uint256(block.prevrandao));
     }
 
     /// @notice deposit tokens without minting any dice. all interest goes to the prize pool and dev fund.
