@@ -199,7 +199,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
     function skirmishColors(LibPRNG.PRNG memory prng, uint256 color0, uint256 color1, uint8 rounds)
-        public
+        public view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         DieInfo memory dice0 = dice[color0];
@@ -231,7 +231,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function skirmishBags(LibPRNG.PRNG memory prng, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 draws)
-        public
+        public view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         uint256 bagSize = diceBag0.length;
@@ -264,7 +264,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function skirmishPVE(LibPRNG.PRNG memory prng, address player)
-        public
+        public view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         PlayerInfo memory playerInfo = players[player];
@@ -283,7 +283,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     /// @notice compare 2 player's favorite dice
     function skirmishPlayers(LibPRNG.PRNG memory prng, address player0, address player1)
-        public
+        public view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);

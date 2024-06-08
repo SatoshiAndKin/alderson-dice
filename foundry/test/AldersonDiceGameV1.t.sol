@@ -151,7 +151,7 @@ contract AldersonDiceGameV1Test is Test {
         require(expectedRedeem >= amount - 1);
     }
 
-    function test_twoDiceSkirmish() public {
+    function test_twoDiceSkirmish() public view {
         uint16 color0 = 0;
         uint16 color1 = 4;
 
@@ -186,7 +186,7 @@ contract AldersonDiceGameV1Test is Test {
         require(ties < wins1, "unexpected ties");
     }
 
-    function test_twoBagSkirmish() public {
+    function test_twoBagSkirmish() public view {
         // remember, dieIds start at 1, but colors start at 0!
         uint256 die0 = 2;
         uint256 die1 = 7;

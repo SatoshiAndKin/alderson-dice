@@ -28,8 +28,9 @@ contract AldersonDiceGameV1Script is Script {
 
         AldersonDiceNFT nft = new AldersonDiceNFT(owner);
 
-        game =
-            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, mintFee, "ipfs://alderson-dice.eth/dice/");
+        // TODO: mintFee that can be changed instead of the math like we have now
+        AldersonDiceGameV1 game =
+            new AldersonDiceGameV1(owner, devFund, prizeFund, nft, prizeVault, price, "ipfs://alderson-dice.eth/dice/");
 
         nft.upgrade(address(game));
 
