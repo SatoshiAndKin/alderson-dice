@@ -214,8 +214,9 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         uint256 numIds = diceIds.length;
         for (uint256 i = 0; i < numIds; i++) {
+            uint256 currentId = diceIds[i];
             for (uint256 j = 0; j < diceAmounts[i]; j++) {
-                bag[bagIndex] = diceIds[i];
+                bag[bagIndex] = currentId;
                 bagIndex++;
             }
         }
