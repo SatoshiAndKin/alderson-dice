@@ -33,6 +33,11 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     event SetMintDevFee(uint256 newFee);
     event SetMintPrizeFee(uint256 newFee);
 
+    // this is probably way too much data to emit, but we only expect this to be called off-chain so it should be okay
+    // TODO: but wait. do we get logs out of eth_call. i think maybe we will need to return the data instead. hmm
+    event SkirmishBags(uint256 draws, uint256[] diceBag0, uint256[] diceBag1);
+    event SkirmishColor(uint256 color0, uint256 color1, uint16 round, uint256 side0, uint256 side1);
+
     event Sponsored(address indexed sender, address indexed account, uint256 amount, uint256 balance, uint256 total);
 
     AldersonDiceNFT public immutable nft;
@@ -220,24 +225,24 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
     function skirmishColors(LibPRNG.PRNG memory prng, uint256 color0, uint256 color1, uint8 rounds)
-        public view
+        public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
-        DieColor memory dice0 = dice[color0];
-        DieColor memory dice1 = dice[color1];
+        DieColor memory dieColor0 = dice[color0 % NUM_COLORS];
+        DieColor memory dieColor1 = dice[color1 % NUM_COLORS];
 
         for (uint16 round = 0; round < rounds; round++) {
             uint256 side0 = rollDie(prng);
             uint256 side1 = rollDie(prng);
 
             // // TODO: use console.log?
-            // emit Pips(color0, dice0.pips, color1, dice1.pips);
+            // emit Pips(color0, dieColor0.pips, color1, dieColor1.pips);
 
-            uint32 roll0 = dice0.pips[side0];
-            uint32 roll1 = dice1.pips[side1];
+            uint32 roll0 = dieColor0.pips[side0];
+            uint32 roll1 = dieColor1.pips[side1];
 
             // // TODO: use console.log?
-            // emit Skirmish(side0, side1, roll0, roll1);
+            emit SkirmishColor(color0, color1, round, side0, side1);
 
             if (roll0 > roll1) {
                 wins0++;
@@ -252,7 +257,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function skirmishBags(LibPRNG.PRNG memory prng, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 draws)
-        public view
+        public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         uint256 bagSize = diceBag0.length;
@@ -265,11 +270,12 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         prng.shuffle(diceBag0);
         prng.shuffle(diceBag1);
 
+        emit SkirmishBags(draws, diceBag0, diceBag1);
+
         for (uint256 i = 0; i < draws; i++) {
             uint256 color0 = color(diceBag0[i]);
             uint256 color1 = color(diceBag1[i]);
 
-            // TODO: maybe we do want the diceId passed to this so we can use it for tie breaking or something
             (uint8 w0, uint8 w1,) = skirmishColors(prng, color0, color1, NUM_ROLLS);
 
             if (w0 > w1) {
@@ -286,7 +292,6 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     function skirmishPVE(LibPRNG.PRNG memory prng, address player)
         public
-        view
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         PlayerInfo memory playerInfo = players[player];
@@ -305,7 +310,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     /// @notice compare 2 player's favorite dice
     function skirmishPlayers(LibPRNG.PRNG memory prng, address player0, address player1)
-        public view
+        public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);
@@ -331,7 +336,6 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         returns (uint256[] memory tokenIds, uint256[] memory amounts)
     {
         uint256 sum = 0;
-
 
         // TODO: this should actually be NUM_DICE.
         // TODO: modify this distribution so that dice in higher tiers are more rare?
@@ -367,6 +371,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         tokenIds[lastId] = lastId + 1;
         amounts[lastId] = numDice - sum;
 
+        // shuffling the tokenIds or the amounts should work equally well
         prng.shuffle(tokenIds);
     }
 
