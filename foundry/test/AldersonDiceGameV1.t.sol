@@ -216,8 +216,6 @@ contract AldersonDiceGameV1Test is Test {
         require(color0 == 0, "unexpected color0");
         require(color1 == 4, "unexpected color1");
 
-        LibPRNG.PRNG memory prng;
-
         uint256 bagSize = game.NUM_DICE_BAG();
 
         uint256[] memory bag0 = new uint256[](bagSize);
@@ -235,7 +233,7 @@ contract AldersonDiceGameV1Test is Test {
         // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
         // TODO: what are the odds that they lose?
         // TODO: better to do do a bunch of games of 10 rounds?
-        (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishBags(prng, bag0, bag1, 10);
+        (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishBags(bag0, bag1, 10);
 
         console.log("wins0", wins0);
         console.log("wins1", wins1);

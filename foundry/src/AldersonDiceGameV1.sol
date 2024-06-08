@@ -37,6 +37,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     // TODO: but wait. do we get logs out of eth_call. i think maybe we will need to return the data instead. hmm
     event SkirmishBags(uint256 draws, uint256[] diceBag0, uint256[] diceBag1);
     event SkirmishColor(uint256 color0, uint256 color1, uint16 round, uint256 side0, uint256 side1);
+    event SkirmishPlayers(address indexed player0, address indexed player1, uint8 wins0, uint8 wins1, uint8 ties);
 
     event Sponsored(address indexed sender, address indexed account, uint256 amount, uint256 balance, uint256 total);
 
@@ -199,7 +200,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     function currentBag() public view returns (uint256[] memory bag) {
-        LibPRNG.PRNG memory prng = blockPrng();
+        LibPRNG.PRNG memory prng = numberPrng(block.number);
 
         bag = currentBag(prng, NUM_DICE_BAG);
     }
@@ -224,7 +225,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
     }
 
     // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
-    function skirmishColors(LibPRNG.PRNG memory prng, uint256 color0, uint256 color1, uint8 rounds)
+    function skirmishColors(LibPRNG.PRNG memory hashPrng, uint256 color0, uint256 color1, uint8 rounds)
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
@@ -232,8 +233,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         DieColor memory dieColor1 = dice[color1 % NUM_COLORS];
 
         for (uint16 round = 0; round < rounds; round++) {
-            uint256 side0 = rollDie(prng);
-            uint256 side1 = rollDie(prng);
+            uint256 side0 = randomRoll(hashPrng);
+            uint256 side1 = randomRoll(hashPrng);
 
             // // TODO: use console.log?
             // emit Pips(color0, dieColor0.pips, color1, dieColor1.pips);
@@ -256,10 +257,12 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // emit ScoreCard(scoreCard);
     }
 
-    function skirmishBags(LibPRNG.PRNG memory prng, uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 draws)
+    function skirmishBags(uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 draws)
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
+        LibPRNG.PRNG memory hashPrng = blockhashPrng();
+
         uint256 bagSize = diceBag0.length;
 
         require(bagSize == diceBag1.length, "Dice bags must be the same length");
@@ -267,8 +270,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
         // randomize the dice
         // TODO: just shuffle one bag? with a good shuffle function, this is equivalent. its not nearly as fun to watch though
-        prng.shuffle(diceBag0);
-        prng.shuffle(diceBag1);
+        hashPrng.shuffle(diceBag0);
+        hashPrng.shuffle(diceBag1);
 
         emit SkirmishBags(draws, diceBag0, diceBag1);
 
@@ -276,7 +279,7 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
             uint256 color0 = color(diceBag0[i]);
             uint256 color1 = color(diceBag1[i]);
 
-            (uint8 w0, uint8 w1,) = skirmishColors(prng, color0, color1, NUM_ROLLS);
+            (uint8 w0, uint8 w1,) = skirmishColors(hashPrng, color0, color1, NUM_ROLLS);
 
             if (w0 > w1) {
                 wins0++;
@@ -290,13 +293,14 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // emit ScoreCard(scoreCard);
     }
 
-    function skirmishPVE(LibPRNG.PRNG memory prng, address player)
+    function skirmishPVE(address player)
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
         PlayerInfo memory playerInfo = players[player];
 
-        uint256[] memory diceBag1 = currentBag(prng, NUM_DICE_BAG);
+        // the PVE bag uses easy-to-predict random
+        uint256[] memory diceBag1 = currentBag();
         uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);
 
         require(diceBag1.length == diceBag0.length, "bad bag size");
@@ -305,11 +309,12 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
             diceBag0[i] = playerInfo.favoriteDice[i];
         }
 
-        (wins0, wins1, ties) = skirmishBags(prng, diceBag0, diceBag1, NUM_ROLLS);
+        // but the dice rolls use harder-to-predict random
+        (wins0, wins1, ties) = skirmishBags(diceBag0, diceBag1, NUM_ROLLS);
     }
 
     /// @notice compare 2 player's favorite dice
-    function skirmishPlayers(LibPRNG.PRNG memory prng, address player0, address player1)
+    function skirmishPlayers(address player0, address player1)
         public
         returns (uint8 wins0, uint8 wins1, uint8 ties)
     {
@@ -321,13 +326,15 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
             diceBag1[i] = players[player1].favoriteDice[i];
         }
 
-        (wins0, wins1, ties) = skirmishBags(prng, diceBag0, diceBag1, NUM_ROLLS);
+        (wins0, wins1, ties) = skirmishBags(diceBag0, diceBag1, NUM_ROLLS);
+
+        emit SkirmishPlayers(player0, player1, wins0, wins1, ties);
     }
 
     /// @notice returns the faceId of a given die being rolled
     /// @dev TODO: think a lot more about this
-    function rollDie(LibPRNG.PRNG memory prng) public pure returns (uint256 faceId) {
-        faceId = prng.next() % NUM_SIDES;
+    function randomRoll(LibPRNG.PRNG memory prng) public pure returns (uint256 faceId) {
+        faceId = (prng.next()) % NUM_SIDES;
     }
 
     function randomDice(LibPRNG.PRNG memory prng, uint256 numDice)
@@ -450,7 +457,8 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
         // deposit takes the amount of assets
         uint256 shares = vaultToken.deposit(cost, address(this));
 
-        LibPRNG.PRNG memory prng = blockPrng();
+        // we actually want the dice purchased to be predictable. i think that will be a fun mini-game for people
+        LibPRNG.PRNG memory prng = numberPrng(block.number);
 
         _buyDice(prng, receiver, numDice, shares, priceWithFees_);
     }
@@ -483,8 +491,21 @@ contract AldersonDiceGameV1 is IGameLogic, Ownable {
 
     /// @dev TODO: THIS IS PREDICTABLE! KEEP THINKING ABOUT THIS
     /// I think predictable is fine for most of this game's random. I want players able to plan ahead some.
-    function blockPrng() public view returns (LibPRNG.PRNG memory prng) {
-        prng.seed(block.number);
+    function numberPrng(uint256 n) public pure returns (LibPRNG.PRNG memory prng) {
+        prng.seed(n);
+
+        // TODO: do we need this? having a seed of a number doesn't feel very good so this at least adds one keccak to it before being used
+        prng.next();
+    }
+
+    /// @dev TODO: THIS IS PREDICTABLE (but not as easily as block number)! KEEP THINKING ABOUT THIS
+    /// I think predictable is fine for most of this game's random. I want players able to plan ahead some.
+    function blockhashPrng() public view returns (LibPRNG.PRNG memory prng) {
+        uint256 b = block.number;
+
+        b = uint256(blockhash(b));
+
+        prng.seed(b);
     }
 
     /// @notice deposit tokens without minting any dice. all interest goes to the prize pool and dev fund.
