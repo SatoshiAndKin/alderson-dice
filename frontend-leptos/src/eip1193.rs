@@ -11,6 +11,7 @@ use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 type SubscriptionCallback = Box<dyn Fn(()) -> Result<(), JsValue>>;
 
 // TODO: theres a bunch fields on here, but we don't need them yet
+// TODO: actually i think we should delete some of this and use viem when at all possible
 #[derive(Clone)]
 pub struct EIP1193Provider {
     _inner: JsValue,
@@ -62,12 +63,9 @@ interface ProviderRpcError extends Error {
 }
 */
 
+// TODO: how do we keep set_chain_id and set_accounts working
 impl EIP1193Provider {
-    pub fn new(
-        value: JsValue,
-        set_chain_id: WriteSignal<String>,
-        set_accounts: WriteSignal<Vec<String>>,
-    ) -> Result<Self, JsValue> {
+    pub fn new(value: JsValue) -> Result<Self, JsValue> {
         let request = Reflect::get(&value, &"request".into()).unwrap();
 
         if request.is_undefined() {
@@ -86,12 +84,10 @@ impl EIP1193Provider {
         // TODO: move this to a setter function
         let on_chain_changed = Closure::wrap(Box::new(move |chain_id: JsValue| {
             let chain_id = chain_id.as_string().expect("no chain id");
-            logging::log!("chain_id: {:?}", chain_id);
+            logging::log!("chain_id changed: {:?}", chain_id);
 
             // the official docs recommend a reload on chain change. but leptos should keep everything in sync for us
             // window().location().reload().expect("failed to reload");
-
-            set_chain_id(chain_id);
         }) as Box<dyn FnMut(JsValue)>);
 
         let on_chain_changed = on_chain_changed.into_js_value();
@@ -100,7 +96,7 @@ impl EIP1193Provider {
 
         // on_connect
         let on_connect = Closure::wrap(Box::new(move |connect_object: JsValue| {
-            logging::log!("connect: {:?}", connect_object);
+            logging::log!("connected: {:?}", connect_object);
 
             // TODO: JsValue(Object({"chainId":"0xa4b1"}))
 
@@ -109,7 +105,7 @@ impl EIP1193Provider {
                 .as_string()
                 .expect("no chain id");
 
-            set_chain_id(chain_id);
+            // set_chain_id(chain_id);
         }) as Box<dyn FnMut(JsValue)>);
 
         let on_connect = on_connect.into_js_value();
@@ -118,9 +114,9 @@ impl EIP1193Provider {
 
         // on_disconnect
         let on_disconnect = Closure::wrap(Box::new(move || {
-            logging::log!("disconnect");
+            logging::log!("disconnected");
 
-            set_chain_id("".to_string());
+            // set_chain_id("".to_string());
         }) as Box<dyn FnMut()>);
 
         let on_disconnect = on_disconnect.into_js_value();
@@ -159,19 +155,19 @@ impl EIP1193Provider {
 
         // on_accounts_changed
         let on_accounts_changed = Closure::wrap(Box::new(move |accounts: JsValue| {
-            logging::log!("accounts changed: {:?}", accounts);
-
             let accounts = accounts
                 .dyn_into::<js_sys::Array>()
                 .expect("Expected an array for accounts");
 
             // TODO: turn this into an Address object?
-            let accounts = accounts
+            let accounts: Vec<_> = accounts
                 .iter()
                 .map(|x| x.as_string().expect("account is not a string"))
                 .collect();
 
-            set_accounts(accounts);
+            logging::log!("accounts changed: {:?}", accounts);
+
+            // set_accounts(accounts);
         }) as Box<dyn FnMut(JsValue)>);
 
         let on_accounts_changed = on_accounts_changed.into_js_value();

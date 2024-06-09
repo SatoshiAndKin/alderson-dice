@@ -90,7 +90,7 @@ export function gameContract(publicClient, walletClient) {
 
   return getContract({
     // TODO: probably get this from build scripts in the rust pipeline
-    address: '0xcD45DeD0c251B1715FB9C3e72E2cEC2e2fb1E0A9',
+    address: '0x3904228420cfbB14dEB7a42beC77331F9a9f4BB7',
     abi: gameAbi,
     client,
   });

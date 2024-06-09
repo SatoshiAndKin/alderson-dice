@@ -40,13 +40,18 @@ fn App() -> impl IntoView {
 
     // TODO: i think these should maybe be moved into their own components
     let (count, set_count) = create_signal(0);
+
+    // TODO: i want this to be a resource except for the fact that we call set_chain_id inside a callback
+    // TODO: maybe that callback should be rewritten to instead call refetch on this? that doesn't seem right either
     let (chain_id, set_chain_id) = create_signal("".to_string());
-    let (accounts, set_accounts) = create_signal(Vec::new());
-    let (provider, set_provider) = create_signal::<Option<eip1193::EIP1193Provider>>(None);
+    let (selected_provider, set_selected_provider) =
+        create_signal::<Option<eip1193::EIP1193Provider>>(None);
     let (public_client, set_public_client) = create_signal(defaultPublicClient.clone());
     let (wallet_client, set_wallet_client) = create_signal::<Option<ViemWalletClient>>(None);
     let (latest_block_head, set_latest_block_header) =
         create_signal::<Option<HashMap<String, JsValue>>>(None);
+
+    let all_providers = Rc::new(Mutex::new(Vec::new()));
 
     let block_number = move || {
         if let Some(block) = latest_block_head() {
@@ -136,6 +141,18 @@ fn App() -> impl IntoView {
         }
     };
 
+    let accounts: Resource<Option<ViemWalletClient>, Vec<String>> =
+        create_resource(wallet_client, |wallet_client| async move {
+            if let Some(wallet_client) = wallet_client {
+                wallet_client
+                    .request_addresses()
+                    .await
+                    .expect("request addresses failed")
+            } else {
+                vec![]
+            }
+        });
+
     // TODO: eventually emit_missed should be a user option
     // TODO: if another provider is chosen, this subscription should be ended
     let block_sub = defaultPublicClient.watch_heads(set_latest_block_header, false);
@@ -154,16 +171,25 @@ fn App() -> impl IntoView {
 
         let provider_value = Reflect::get(&detail, &"provider".into()).unwrap();
 
-        let provider =
-            eip1193::EIP1193Provider::new(provider_value.clone(), set_chain_id, set_accounts)
-                .unwrap();
+        let provider = eip1193::EIP1193Provider::new(provider_value).unwrap();
 
         logging::log!("{:?}", provider);
 
-        // TODO: make some calls in the background?
+        {
+            let mut lock = all_providers.lock().unwrap();
 
-        // TODO: this should be added to a list, rather than taking over. then the user can pick which provider to use and we can make the wallet from that
-        set_provider(Some(provider));
+            // TODO: de-dupe?
+            lock.push(provider);
+
+            match lock.len() {
+                0 => set_selected_provider(None),
+                1 => set_selected_provider(lock.first().cloned()),
+                _ => {
+                    log!("multiple providers are not supported yet. using the first one");
+                    set_selected_provider(lock.first().cloned());
+                }
+            }
+        }
     }) as Box<dyn FnMut(_)>);
 
     // TODO: this action feels wrong. we fire it from a button press but also from an event listener
@@ -181,7 +207,7 @@ fn App() -> impl IntoView {
                     set_wallet_client(None);
                     set_public_client(defaultPublicClient.clone());
 
-                    // TODO: DRY
+                    // this should be inside the Drop on WalletClient
                     {
                         let mut lock = block_subscription.lock().unwrap();
 
@@ -197,7 +223,6 @@ fn App() -> impl IntoView {
                         *lock = (sub, defaultPublicClient.inner());
                     }
 
-                    set_accounts.update(|x| x.clear());
                     set_chain_id("".to_string());
                 }
             } else if chain_id != desired_chain_id {
@@ -249,28 +274,6 @@ fn App() -> impl IntoView {
                     *lock = (sub, public.inner());
                 }
 
-                // TODO: move this to a different action
-                // TODO: what eip?
-                // TODO: DRY. this same code is in the provider, but we do need it here too
-                let accounts = provider
-                    .request("eth_requestAccounts", None)
-                    .await
-                    .expect("failed to request accounts");
-
-                let accounts = accounts
-                    .dyn_into::<js_sys::Array>()
-                    .expect("Expected an array for accounts");
-
-                // TODO: turn this into an Address object?
-                let accounts: Vec<_> = accounts
-                    .iter()
-                    .map(|x| x.as_string().expect("account is not a string"))
-                    .collect();
-
-                log!("requested accounts: {:?}", accounts);
-
-                set_accounts(accounts);
-
                 // TODO: save the wallet to localstorage so that we can automatically reconnect to it if we see it again. use the provider uuid or rdns?
 
                 // TODO: we should probably have the bindings in rust instead of js... but then we need to figure out how to handle the provider
@@ -280,6 +283,10 @@ fn App() -> impl IntoView {
             chain_id
         }
     });
+
+    let get_total_dice = async move {
+        todo!();
+    };
 
     let announce_provider_callback = announce_provider_callback.into_js_value();
 
@@ -311,11 +318,10 @@ fn App() -> impl IntoView {
                 </button>
             </article>
 
-            <Show when=move || { provider().is_some() } fallback=|| view! { <UnsupportedBrowser/> }>
+            <Show when=move || { selected_provider().is_some() } fallback=|| view! { <UnsupportedBrowser/> }>
                 <article>
-
                     {
-                        let provider: eip1193::EIP1193Provider = provider().unwrap();
+                        let provider: eip1193::EIP1193Provider = selected_provider().unwrap();
                         let disconnect_chain_args = (
                             provider.clone(),
                             chain_id().clone(),
@@ -327,9 +333,12 @@ fn App() -> impl IntoView {
                             ARBITRUM_CHAIN_ID.to_string(),
                         );
                         if chain_id() == ARBITRUM_CHAIN_ID {
+                            // we call dispatch because we might start with the wallet already being connected. i don't love this
                             switch_chain.dispatch(switch_chain_args);
                             view! {
                                 // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // TODO: dropdown to change the chain?
 
                                 // we call dispatch because we might start with the wallet already being connected. i don't love this
 
@@ -343,17 +352,10 @@ fn App() -> impl IntoView {
                                 .into_view()
                         } else {
                             view! {
-                                // TODO: don't call chain_id twice? use a resource? is that the right term?
-
-                                // we call dispatch because we might start with the wallet already being connected. i don't love this
-
-                                // TODO: don't call chain_id twice? use a resource? is that the right term?
-
-                                // we call dispatch because we might start with the wallet already being connected. i don't love this
-
-                                // a button that requests the arbitrum provider when clicked
+                                // a button that requests the arbitrum provider and accounts when clicked
                                 // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
                                 // TODO: should also let the user use other wallets like with walletconnect
+                                // TODO: if the user has already clicked the button this session, dipatch now?
                                 <button on:click=move |_| {
                                     switch_chain.dispatch(switch_chain_args.clone())
                                 }>"Connect Your Wallet to Arbitrum"</button>
@@ -368,7 +370,7 @@ fn App() -> impl IntoView {
             // TODO: this should be a resource or maybe an action
             <article>
                 {move || {
-                    if let Some(wallet) = wallet_client().as_ref() {
+                    if let Some(wallet) = wallet_client() {
                         format!("{:?}", wallet)
                     } else {
                         format!("{:?}", public_client())
@@ -408,7 +410,11 @@ fn App() -> impl IntoView {
                 </article>
             </Show>
 
-            <Show when=move || { !accounts().is_empty() }>
+            // TODO: use `with` here?
+            <Show when=move || match accounts() {
+                None => false,
+                Some(x) => !x.is_empty(),
+            }>
                 // TODO: button to request accounts instead of only doing it on chain switch
                 // this saves them having to hit "disconnect" when they want to add multiple accounts
 

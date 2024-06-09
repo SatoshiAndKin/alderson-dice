@@ -4,7 +4,7 @@
 //! TODO: private wallet_client that sends to a protected relay instead of the user's node?
 use std::collections::HashMap;
 
-use js_sys::{Function, Object, Reflect};
+use js_sys::{Function, Object, Promise, Reflect};
 use leptos::logging::log;
 use leptos::WriteSignal;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
@@ -13,12 +13,12 @@ use crate::createPublicClientForChain;
 
 use super::createWalletClientForChain;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ViemWalletClient {
     inner: JsValue,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ViemPublicClient {
     inner: JsValue,
 }
@@ -104,6 +104,32 @@ impl ViemWalletClient {
 
     pub fn inner(&self) -> JsValue {
         self.inner.clone()
+    }
+
+    pub async fn request_addresses(&self) -> Result<Vec<String>, JsValue> {
+        let request_addresses_fn = Reflect::get(&self.inner, &"requestAddresses".into())
+            .expect("getting requestAddresses")
+            .dyn_into::<Function>()
+            .expect("requestAddresses is not a function");
+
+        let promise: Promise = request_addresses_fn
+            .call0(&self.inner)
+            .expect("request addresses call")
+            .unchecked_into();
+
+        let accounts = wasm_bindgen_futures::JsFuture::from(promise).await?;
+
+        let accounts = accounts
+            .dyn_into::<js_sys::Array>()
+            .expect("Expected an array for accounts");
+
+        // TODO: turn this into an Address object?
+        let accounts = accounts
+            .iter()
+            .map(|x| x.as_string().expect("account is not a string"))
+            .collect();
+
+        Ok(accounts)
     }
 }
 
