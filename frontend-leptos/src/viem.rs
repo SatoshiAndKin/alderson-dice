@@ -154,6 +154,7 @@ impl std::fmt::Debug for ViemWalletClient {
 ///
 /// // event
 /// contract.(createEventFilter|getEvents|watchEvent).(eventName)(args, options)
+#[derive(Clone)]
 pub struct ReadOnlyContract {
     inner: JsValue,
 
@@ -165,16 +166,29 @@ pub struct ReadOnlyContract {
     watch_event_obj: Object,
 }
 
+impl PartialEq for ReadOnlyContract {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
 impl std::fmt::Debug for ReadOnlyContract {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ReadOnlyContract").finish_non_exhaustive()
     }
 }
 
+#[derive(Clone)]
 pub struct ReadAndWriteContract {
     contract: ReadOnlyContract,
 
     write_obj: Object,
+}
+
+impl PartialEq for ReadAndWriteContract {
+    fn eq(&self, other: &Self) -> bool {
+        self.contract == other.contract
+    }
 }
 
 impl std::fmt::Debug for ReadAndWriteContract {
@@ -233,7 +247,7 @@ impl ReadOnlyContract {
         self.inner.clone()
     }
 
-    fn run(
+    async fn run(
         &self,
         obj: &Object,
         fn_name: &str,
@@ -245,61 +259,69 @@ impl ReadOnlyContract {
             .dyn_into::<Function>()
             .expect("fn_name is not a function");
 
-        f.call2(&self.inner, args, options)
+        let promise: Promise = f
+            .call2(&self.inner, args, options)?
+            .dyn_into::<Promise>()
+            .expect("not a promise");
+
+        wasm_bindgen_futures::JsFuture::from(promise).await
     }
 
-    pub fn read(
+    pub async fn read(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.run(&self.read_obj, fn_name, args, options)
+        self.run(&self.read_obj, fn_name, args, options).await
     }
 
-    pub fn create_event_filter(
+    pub async fn create_event_filter(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         self.run(&self.create_event_filter_obj, fn_name, args, options)
+            .await
     }
 
-    pub fn estimate_gas(
+    pub async fn estimate_gas(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         self.run(&self.estimate_gas_obj, fn_name, args, options)
+            .await
     }
 
-    pub fn get_events(
+    pub async fn get_events(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.run(&self.get_events_obj, fn_name, args, options)
+        self.run(&self.get_events_obj, fn_name, args, options).await
     }
 
-    pub fn simulate(
+    pub async fn simulate(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.run(&self.simulate_obj, fn_name, args, options)
+        self.run(&self.simulate_obj, fn_name, args, options).await
     }
 
-    pub fn watch_event(
+    pub async fn watch_event(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         self.run(&self.watch_event_obj, fn_name, args, options)
+            .await
     }
 }
 
@@ -332,69 +354,73 @@ impl ReadAndWriteContract {
         self.contract.inner()
     }
 
-    pub fn read(
+    pub async fn read(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.contract.read(fn_name, args, options)
+        self.contract.read(fn_name, args, options).await
     }
 
-    pub fn create_event_filter(
+    pub async fn create_event_filter(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         // TODO: how do we unsubscribe from this?
-        self.contract.create_event_filter(fn_name, args, options)
+        self.contract
+            .create_event_filter(fn_name, args, options)
+            .await
     }
 
-    pub fn estimate_gas(
+    pub async fn estimate_gas(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.contract.estimate_gas(fn_name, args, options)
+        self.contract.estimate_gas(fn_name, args, options).await
     }
 
-    pub fn get_events(
+    pub async fn get_events(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         // TODO: change ok return value into an array of event logs
-        self.contract.get_events(fn_name, args, options)
+        self.contract.get_events(fn_name, args, options).await
     }
 
-    pub fn simulate(
+    pub async fn simulate(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.contract.simulate(fn_name, args, options)
+        self.contract.simulate(fn_name, args, options).await
     }
 
-    pub fn watch_event(
+    pub async fn watch_event(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         // TODO: change ok return value into an "unwatch" function
-        self.contract.watch_event(fn_name, args, options)
+        self.contract.watch_event(fn_name, args, options).await
     }
 
-    pub fn write(
+    pub async fn write(
         &self,
         fn_name: &str,
         args: &JsValue,
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
-        self.contract.run(&self.write_obj, fn_name, args, options)
+        self.contract
+            .run(&self.write_obj, fn_name, args, options)
+            .await
     }
 }

@@ -3,7 +3,7 @@ pub mod eip6963;
 pub mod viem;
 
 use derive_more::From;
-use js_sys::{BigInt, Reflect};
+use js_sys::{BigInt, Promise, Reflect};
 use leptos::{logging::log, *};
 use std::sync::Mutex;
 use std::{collections::HashMap, rc::Rc};
@@ -22,10 +22,24 @@ fn main() {
     });
 }
 
-#[derive(Debug, From)]
+#[derive(Clone, Debug, From, PartialEq)]
 enum Contract {
     ReadOnly(ReadOnlyContract),
     ReadAndWrite(ReadAndWriteContract),
+}
+
+impl Contract {
+    pub async fn read(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        match self {
+            Contract::ReadOnly(x) => x.read(fn_name, args, options).await,
+            Contract::ReadAndWrite(x) => x.read(fn_name, args, options).await,
+        }
+    }
 }
 
 #[component]
@@ -284,9 +298,27 @@ fn App() -> impl IntoView {
         }
     });
 
-    let get_total_dice = async move {
-        todo!();
-    };
+    // TODO: shame we don't have automatic types on this
+    let total_dice = create_resource(
+        move || (nft_contract(), latest_block_head()),
+        |(nft_contract, latest_block_head)| async move {
+            // TODO: subscribe to logs here. not sure how to have that signal write to this
+
+            // TODO: what option do we add to include this block number/hash in the query
+            let total_dice = nft_contract
+                .read("totalSupply", &JsValue::undefined(), &JsValue::undefined())
+                .await
+                .expect("failed to get total dice");
+
+            let total_dice = total_dice
+                .dyn_into::<BigInt>()
+                .expect("total dice is not a bigint");
+
+            let total_dice = total_dice.to_string(10).unwrap();
+
+            format!("{}", total_dice)
+        },
+    );
 
     let announce_provider_callback = announce_provider_callback.into_js_value();
 
@@ -396,7 +428,8 @@ fn App() -> impl IntoView {
 
                 <article>"Game Contract: " {move || { format!("{:?}", game_contract()) }}</article>
 
-                <article>"Total Dice: " "???"</article>
+                // TODO: loading spinner
+                <article>"Total Dice: " {total_dice}</article>
 
                 <article>
                     "This block's dice: "
