@@ -11,3 +11,5 @@ Start anvil:
 Deploy to anvil:
 
     forge script script/DeployV0.sol --fork-url http://localhost:8545 --broadcast 
+
+    cast rpc evm_setIntervalMining 4
