@@ -5,8 +5,8 @@ pub mod viem;
 use derive_more::From;
 use js_sys::{BigInt, Reflect};
 use leptos::{logging::log, *};
-use std::rc::Rc;
 use std::sync::Mutex;
+use std::{collections::HashMap, rc::Rc};
 use viem::{ReadAndWriteContract, ReadOnlyContract, ViemPublicClient, ViemWalletClient};
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
@@ -18,9 +18,7 @@ fn main() {
     console_error_panic_hook::set_once();
 
     mount_to_body(move || {
-        view! {
-            <App />
-        }
+        view! { <App/> }
     });
 }
 
@@ -47,7 +45,54 @@ fn App() -> impl IntoView {
     let (provider, set_provider) = create_signal(None);
     let (public_client, set_public_client) = create_signal(defaultPublicClient.clone());
     let (wallet_client, set_wallet_client) = create_signal::<Option<ViemWalletClient>>(None);
-    let (latest_block_head, set_latest_block_header) = create_signal(None);
+    let (latest_block_head, set_latest_block_header) =
+        create_signal::<Option<HashMap<String, JsValue>>>(None);
+
+    let block_number = move || {
+        if let Some(block) = latest_block_head() {
+            if let Some(number) = block.get("number") {
+                let number = number.dyn_ref::<BigInt>().expect("timestamp is bigint");
+
+                let number = format!("{}", number.to_string(10).unwrap());
+
+                Some(number)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    let block_timestamp = move || {
+        if let Some(block) = latest_block_head() {
+            if let Some(timestamp) = block.get("timestamp") {
+                let timestamp = timestamp.dyn_ref::<BigInt>().expect("timestamp is bigint");
+
+                let timestamp = format!("{}", timestamp.to_string(10).unwrap());
+
+                Some(timestamp)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    let block_hash = move || {
+        if let Some(block) = latest_block_head() {
+            if let Some(x) = block.get("hash") {
+                let x = x.as_string().expect("blockhash is not a string");
+                Some(x)
+            } else {
+                log!("valid keys: {:?}", block.keys());
+                None
+            }
+        } else {
+            None
+        }
+    };
 
     let nft_contract = move || {
         let public_inner = public_client.with(|x| x.inner());
@@ -253,192 +298,146 @@ fn App() -> impl IntoView {
 
     view! {
         <main class="container">
-        <h1>"Alderson Dice"</h1>
+            <h1>"Alderson Dice"</h1>
 
-        <article>
-            <button
-                on:click=move |_| {
+            <article>
+                <button on:click=move |_| {
                     set_count.update(|n| *n += 1);
                     logging::log!("clicked");
-                }
-            >
-                "Click me: "
-                {count}
-            </button>
-        </article>
+                }>
 
-        <Show
-            when=move || { provider().is_some() }
-            fallback=|| view! { <UnsupportedBrowser/> }
-        >
-            <article>
-            {
-                let provider: eip1193::EIP1193Provider = provider().unwrap();
+                    "Click me: " {count}
+                </button>
+            </article>
 
-                // TODO: don't call chain_id twice? use a resource? is that the right term?
-                let disconnect_chain_args = (provider.clone(), chain_id().clone(), "".to_string());
-                let switch_chain_args = (provider.clone(), chain_id().clone(), ARBITRUM_CHAIN_ID.to_string());
+            <Show when=move || { provider().is_some() } fallback=|| view! { <UnsupportedBrowser/> }>
+                <article>
 
-                if chain_id() == ARBITRUM_CHAIN_ID {
-                    // we call dispatch because we might start with the wallet already being connected. i don't love this
-                    switch_chain.dispatch(switch_chain_args);
+                    {
+                        let provider: eip1193::EIP1193Provider = provider().unwrap();
+                        let disconnect_chain_args = (
+                            provider.clone(),
+                            chain_id().clone(),
+                            "".to_string(),
+                        );
+                        let switch_chain_args = (
+                            provider.clone(),
+                            chain_id().clone(),
+                            ARBITRUM_CHAIN_ID.to_string(),
+                        );
+                        if chain_id() == ARBITRUM_CHAIN_ID {
+                            switch_chain.dispatch(switch_chain_args);
+                            view! {
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
 
-                    view! {
-                        <button
-                            on:click=move |_| {
-                                switch_chain.dispatch(disconnect_chain_args.clone())
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
+                                <button on:click=move |_| {
+                                    switch_chain.dispatch(disconnect_chain_args.clone())
+                                }>
+
+                                    "Disconnect Your Wallet"
+                                </button>
                             }
-                        >
-                            "Disconnect Your Wallet"
-                        </button>
-                    }.into_view()
-                } else {
-                    view! {
-                        // a button that requests the arbitrum provider when clicked
-                        // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
-                        // TODO: should also let the user use other wallets like with walletconnect
-                        <button
-                            on:click=move |_| switch_chain.dispatch(switch_chain_args.clone())
-                        >
-                            "Connect Your Wallet to Arbitrum"
-                        </button>
-                    }.into_view()
-                }
-            }
-            </article>
-        </Show>
+                                .into_view()
+                        } else {
+                            view! {
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
 
-        // TODO: this should be a resource or maybe an action
-        <article>
-            {move || {
-                if let Some(wallet) = wallet_client().as_ref() {
-                    format!("{:?}", wallet)
-                } else {
-                    format!("{:?}", public_client())
-                }
-            }}
-        </article>
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
 
-        <Show
-            when=move || { latest_block_head().is_some() }
-        >
+                                // a button that requests the arbitrum provider when clicked
+                                // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
+                                // TODO: should also let the user use other wallets like with walletconnect
+                                <button on:click=move |_| {
+                                    switch_chain.dispatch(switch_chain_args.clone())
+                                }>"Connect Your Wallet to Arbitrum"</button>
+                            }
+                                .into_view()
+                        }
+                    }
+
+                </article>
+            </Show>
+
+            // TODO: this should be a resource or maybe an action
             <article>
-                <div>
-                    "Block Number: "
-                    {move || {
-                        // TODO: this should be a component or something like that
-                        let latest_block_head = latest_block_head().expect("no block head");
-
-                        let num = latest_block_head.get("number").expect("no block num").clone();
-
-                        let num = num.dyn_into::<BigInt>().expect("num is bigint");
-
-                        format!("{}", num.to_string(10).unwrap())
-                    }}
-                </div>
-                <div>
-                    "Block Age: "
-                    // TODO: component for the block age
-                    "???"
-                </div>
-                <div>
-                    "Block Hash: "
-                    // TODO: component for the block hash
-                    "???"
-                </div>
-            </article>
-
-            <article>
-                "NFT Contract: "
                 {move || {
-                    let c = nft_contract();
-
-                    // TODO: what should we print? the address?
-                    format!("{:?}", c)
+                    if let Some(wallet) = wallet_client().as_ref() {
+                        format!("{:?}", wallet)
+                    } else {
+                        format!("{:?}", public_client())
+                    }
                 }}
+
             </article>
 
-            <article>
-                "Game Contract: "
-                {move || {
-                    // TODO: what should we print? the address?
-                    format!("{:?}", game_contract())
-                }}
-            </article>
+            <Show when=move || { latest_block_head().is_some() }>
+                <article>
+                    <div>"Block Number: " {block_number}</div>
+                    <div>
+                        "Block Timestamp: " // TODO: component for the block age
+                        {block_timestamp}
+                    </div>
+                    <div>
+                        "Block Hash: " // TODO: component for the block hash
+                        {block_hash}
+                    </div>
+                </article>
 
-            <article>
-                "Total Dice: "
-                "???"
-            </article>
+                <article>"NFT Contract: " {move || { format!("{:?}", nft_contract()) }}
+                </article>
 
-            <article>
-                "This block's dice: "
-                // TODO: component for the game's current bag according to the current block
-                "???"
-            </article>
+                <article>"Game Contract: " {move || { format!("{:?}", game_contract()) }}
+                </article>
 
-            <article>
-                "Other Account's Dice: "
-                // TODO: component to prompt for accounts to watch
-                "???"
-            </article>
-        </Show>
+                <article>"Total Dice: " "???"</article>
 
-        <Show
-            when=move || { !accounts().is_empty() }
-        >
-            // TODO: button to request accounts instead of only doing it on chain switch
-            // this saves them having to hit "disconnect" when they want to add multiple accounts
+                <article>
+                    "This block's dice: "
+                    // TODO: component for the game's current bag according to the current block
+                    "???"
+                </article>
 
-            <article>
-                // TODO: show accounts as an actual list so they can pick a primary one to manage
-                "Your Accounts: "
-                {accounts}
-            </article>
+                <article>
+                    "Other Account's Dice: " // TODO: component to prompt for accounts to watch
+                    "???"
+                </article>
+            </Show>
 
-            // TODO: component for seeing favorite dice
-            // TODO: component for choosing favorite dice
-            <article>
-                "Favorite Dice: "
-                "???"
-            </article>
+            <Show when=move || { !accounts().is_empty() }>
+                // TODO: button to request accounts instead of only doing it on chain switch
+                // this saves them having to hit "disconnect" when they want to add multiple accounts
 
-            <article>
-            "Balances: "
-            // TODO: component for balances
-                "???"
-            </article>
+                <article>
+                    // TODO: show accounts as an actual list so they can pick a primary one to manage
+                    "Your Accounts: " {accounts}
+                </article>
 
-            // TODO: component for buying dice
-            <article>
-                "Buy Dice: "
-                "???"
-            </article>
+                // TODO: component for seeing favorite dice
+                // TODO: component for choosing favorite dice
+                <article>"Favorite Dice: " "???"</article>
 
-            // TODO: component for selling dice
-            <article>
-                "Sell Dice: "
-                "???"
-            </article>
+                <article>
+                    "Balances: " // TODO: component for balances
+                    "???"
+                </article>
 
-            // TODO: component for returning dice
-            <article>
-                "Return Dice: "
-                "???"
-            </article>
+                // TODO: component for buying dice
+                <article>"Buy Dice: " "???"</article>
 
-            // TODO: component for pending transactions
-            <article>
-                "Pending Transactions: "
-                "???"
-            </article>
+                // TODO: component for selling dice
+                <article>"Sell Dice: " "???"</article>
 
-            // TODO: component for transaction history
-            <article>
-                "Transaction History: "
-                "???"
-            </article>
-        </Show>
+                // TODO: component for returning dice
+                <article>"Return Dice: " "???"</article>
+
+                // TODO: component for pending transactions
+                <article>"Pending Transactions: " "???"</article>
+
+                // TODO: component for transaction history
+                <article>"Transaction History: " "???"</article>
+            </Show>
 
         </main>
     }
@@ -450,8 +449,7 @@ fn UnsupportedBrowser() -> impl IntoView {
         <article>
             "Your browser is missing a cryptocurrency wallet extension. Please use the "
             <a href="https://www.coinbase.com/wallet">"Coinbase Wallet app"</a>
-            " or an extension like the "
-            <a href="https://frame.sh">"Frame browser extension"</a>.
+            " or an extension like the " <a href="https://frame.sh">"Frame browser extension"</a> .
             "Support for wallet connect and other external wallets is in development."
         </article>
     }

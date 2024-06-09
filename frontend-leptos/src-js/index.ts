@@ -88,18 +88,10 @@ export function gameContract(publicClient, walletClient) {
     };
   }
 
-  const c: any = getContract({
+  return getContract({
     // TODO: probably get this from build scripts in the rust pipeline
     address: '0xcD45DeD0c251B1715FB9C3e72E2cEC2e2fb1E0A9',
     abi: gameAbi,
     client,
   });
-
-  console.log("typeof name:", typeof (c.read.name));
-
-  console.log("read:", c.read);
-
-  // c.read.name(1).then(console.log);
-
-  return c
 }
