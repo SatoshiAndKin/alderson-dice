@@ -12,7 +12,8 @@ fn main() {
         panic!("esbuild failed");
     }
 
-    // Output directory for generated files
     println!("cargo:rerun-if-changed=src-js/");
     println!("cargo:rerun-if-changed=esbuild.js");
+    println!("cargo:rerun-if-changed=tsconfig.json");
+    println!("cargo:rerun-if-changed=yarn.lock");
 }

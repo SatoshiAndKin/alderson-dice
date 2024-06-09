@@ -2,11 +2,12 @@ pub mod eip1193;
 pub mod eip6963;
 pub mod viem;
 
+use derive_more::From;
 use js_sys::{BigInt, Reflect};
 use leptos::{logging::log, *};
 use std::rc::Rc;
 use std::sync::Mutex;
-use viem::ViemPublicClient;
+use viem::{ReadAndWriteContract, ReadOnlyContract, ViemPublicClient, ViemWalletClient};
 use wasm_bindgen::{closure::Closure, prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::window;
 
@@ -23,6 +24,12 @@ fn main() {
     });
 }
 
+#[derive(Debug, From)]
+enum Contract {
+    ReadOnly(ReadOnlyContract),
+    ReadAndWrite(ReadAndWriteContract),
+}
+
 #[component]
 fn App() -> impl IntoView {
     let window = window().expect("no global `window` exists");
@@ -30,6 +37,7 @@ fn App() -> impl IntoView {
     let x = hello();
     log!("{:?}", x);
 
+    // give the users some data without any wallet connected
     let defaultPublicClient = ViemPublicClient::new(ARBITRUM_CHAIN_ID.to_string(), None);
 
     // TODO: i think these should maybe be moved into their own components
@@ -38,8 +46,50 @@ fn App() -> impl IntoView {
     let (accounts, set_accounts) = create_signal(Vec::new());
     let (provider, set_provider) = create_signal(None);
     let (public_client, set_public_client) = create_signal(defaultPublicClient.clone());
-    let (wallet_client, set_wallet_client) = create_signal(None);
+    let (wallet_client, set_wallet_client) = create_signal::<Option<ViemWalletClient>>(None);
     let (latest_block_head, set_latest_block_header) = create_signal(None);
+
+    let nft_contract = move || {
+        let public_inner = public_client.with(|x| x.inner());
+
+        if let Some(wallet) = wallet_client() {
+            let nftContract = nftContract(public_inner, wallet.inner());
+
+            // TODO: type specific to the game contract
+            let nftContract = ReadAndWriteContract::new(nftContract);
+
+            Contract::from(nftContract)
+        } else {
+            let nftContract = nftContract(public_inner, JsValue::undefined());
+
+            let nftContract = ReadOnlyContract::new(nftContract);
+
+            Contract::from(nftContract)
+        }
+    };
+
+    let game_contract = move || {
+        let public_inner = public_client.with(|x| x.inner());
+
+        if let Some(wallet) = wallet_client() {
+            // TODO: get the game address from the nft contract
+            let gameContract = gameContract(public_inner, wallet.inner());
+
+            let gameContract = ReadAndWriteContract::new(gameContract);
+
+            // TODO: type specific to the game contract
+
+            Contract::from(gameContract)
+        } else {
+            let gameContract = gameContract(public_inner, JsValue::undefined());
+
+            let gameContract = ReadOnlyContract::new(gameContract);
+
+            // TODO: type specific to the game contract
+
+            Contract::from(gameContract)
+        }
+    };
 
     // TODO: eventually emit_missed should be a user option
     // TODO: if another provider is chosen, this subscription should be ended
@@ -71,7 +121,8 @@ fn App() -> impl IntoView {
         set_provider(Some(provider));
     }) as Box<dyn FnMut(_)>);
 
-    // TODO: this action feels weird. we fire it from a button press but also from an event listener
+    // TODO: this action feels wrong. we fire it from a button press but also from an event listener
+    // TODO: i think most of the things in here should be moved to derived signals
     let switch_chain = create_action(move |input: &(eip1193::EIP1193Provider, String, String)| {
         let (provider, chain_id, desired_chain_id) = input.clone();
         let defaultPublicClient = defaultPublicClient.clone();
@@ -91,6 +142,7 @@ fn App() -> impl IntoView {
 
                         let (sub, context) = (&lock.0, &lock.1);
 
+                        // TODO: this should just be a warning
                         let returned = sub.call0(context).expect("failed to unsubscribe");
 
                         log!("unsubscribed: {:?}", returned);
@@ -100,7 +152,7 @@ fn App() -> impl IntoView {
                         *lock = (sub, defaultPublicClient.inner());
                     }
 
-                    set_accounts(Vec::new());
+                    set_accounts.update(|x| x.clear());
                     set_chain_id("".to_string());
                 }
             } else if chain_id != desired_chain_id {
@@ -177,15 +229,6 @@ fn App() -> impl IntoView {
 
                 // TODO: we should probably have the bindings in rust instead of js... but then we need to figure out how to handle the provider
                 // TODO: can we use ethers/alloy instead of viem?
-
-                let nftContract = nftContract(public.inner(), wallet.inner());
-
-                // log!("nft contract: {:?}", nftContract);
-
-                // TODO: get the game address from the nft contract
-                let gameContract = gameContract(public.inner(), wallet.inner());
-
-                // log!("game contract: {:?}", gameContract);
             }
 
             chain_id
@@ -303,6 +346,24 @@ fn App() -> impl IntoView {
                     // TODO: component for the block hash
                     "???"
                 </div>
+            </article>
+
+            <article>
+                "NFT Contract: "
+                {move || {
+                    let c = nft_contract();
+
+                    // TODO: what should we print? the address?
+                    format!("{:?}", c)
+                }}
+            </article>
+
+            <article>
+                "Game Contract: "
+                {move || {
+                    // TODO: what should we print? the address?
+                    format!("{:?}", game_contract())
+                }}
             </article>
 
             <article>

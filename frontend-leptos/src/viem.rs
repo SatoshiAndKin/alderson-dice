@@ -118,3 +118,257 @@ impl std::fmt::Debug for ViemWalletClient {
         f.debug_struct("ViemWalletClient").finish()
     }
 }
+
+/// TODO: use automatically generated bindings instead
+///
+/// In general, contract instance methods follow the following format:
+///
+/// // function
+/// contract.(estimateGas|read|simulate|write).(functionName)(args, options)
+///
+/// // event
+/// contract.(createEventFilter|getEvents|watchEvent).(eventName)(args, options)
+pub struct ReadOnlyContract {
+    inner: JsValue,
+
+    read_obj: Object,
+    create_event_filter_obj: Object,
+    estimate_gas_obj: Object,
+    get_events_obj: Object,
+    simulate_obj: Object,
+    watch_event_obj: Object,
+}
+
+impl std::fmt::Debug for ReadOnlyContract {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadOnlyContract").finish_non_exhaustive()
+    }
+}
+
+pub struct ReadAndWriteContract {
+    contract: ReadOnlyContract,
+
+    write_obj: Object,
+}
+
+impl std::fmt::Debug for ReadAndWriteContract {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadAndWriteContract")
+            .finish_non_exhaustive()
+    }
+}
+
+impl ReadOnlyContract {
+    pub fn new(inner: JsValue) -> Self {
+        // TODO: do javascript checks to see if it has the correct public client type
+
+        let read_obj = Reflect::get(&inner, &"read".into())
+            .expect("getting read")
+            .dyn_into::<Object>()
+            .expect("read is not an object");
+
+        let create_event_filter_obj = Reflect::get(&inner, &"createEventFilter".into())
+            .expect("getting createEventFilter")
+            .dyn_into::<Object>()
+            .expect("createEventFilter is not a function");
+
+        let estimate_gas_obj = Reflect::get(&inner, &"estimateGas".into())
+            .expect("getting estimateGas")
+            .dyn_into::<Object>()
+            .expect("estimateGas is not a function");
+
+        let get_events_obj = Reflect::get(&inner, &"getEvents".into())
+            .expect("getting getEvents")
+            .dyn_into::<Object>()
+            .expect("getEvents is not a function");
+
+        let simulate_obj = Reflect::get(&inner, &"simulate".into())
+            .expect("getting simulate")
+            .dyn_into::<Object>()
+            .expect("simulate is not a function");
+
+        let watch_event_obj = Reflect::get(&inner, &"watchEvent".into())
+            .expect("getting watchEvent")
+            .dyn_into::<Object>()
+            .expect("watchEvent is not a function");
+
+        Self {
+            inner,
+            read_obj,
+            create_event_filter_obj,
+            estimate_gas_obj,
+            get_events_obj,
+            simulate_obj,
+            watch_event_obj,
+        }
+    }
+
+    pub fn inner(&self) -> JsValue {
+        self.inner.clone()
+    }
+
+    fn run(
+        &self,
+        obj: &Object,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let f = Reflect::get(obj, &fn_name.into())
+            .expect("getting function from obj")
+            .dyn_into::<Function>()
+            .expect("fn_name is not a function");
+
+        f.call2(&self.inner, args, options)
+    }
+
+    pub fn read(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.run(&self.read_obj, fn_name, args, options)
+    }
+
+    pub fn create_event_filter(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.run(&self.create_event_filter_obj, fn_name, args, options)
+    }
+
+    pub fn estimate_gas(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.run(&self.estimate_gas_obj, fn_name, args, options)
+    }
+
+    pub fn get_events(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.run(&self.get_events_obj, fn_name, args, options)
+    }
+
+    pub fn simulate(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.run(&self.simulate_obj, fn_name, args, options)
+    }
+
+    pub fn watch_event(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.run(&self.watch_event_obj, fn_name, args, options)
+    }
+}
+
+impl ReadAndWriteContract {
+    pub fn new(inner: JsValue) -> Self {
+        // TODO: do javascript checks to see if it has the correct public client type
+
+        let write_obj = Reflect::get(&inner, &"write".into())
+            .expect("getting write")
+            .dyn_into::<Object>()
+            .expect("write is not an object");
+
+        // both reader and writer have an estimate gas fn
+        let estimate_gas_obj = Reflect::get(&inner, &"estimateGas".into())
+            .expect("getting estimateGas")
+            .dyn_into::<Object>()
+            .expect("estimateGas is not a function");
+
+        let mut inner = ReadOnlyContract::new(inner);
+
+        inner.estimate_gas_obj = estimate_gas_obj;
+
+        Self {
+            contract: inner,
+            write_obj,
+        }
+    }
+
+    pub fn inner(&self) -> JsValue {
+        self.contract.inner()
+    }
+
+    pub fn read(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.contract.read(fn_name, args, options)
+    }
+
+    pub fn create_event_filter(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        // TODO: how do we unsubscribe from this?
+        self.contract.create_event_filter(fn_name, args, options)
+    }
+
+    pub fn estimate_gas(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.contract.estimate_gas(fn_name, args, options)
+    }
+
+    pub fn get_events(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        // TODO: change ok return value into an array of event logs
+        self.contract.get_events(fn_name, args, options)
+    }
+
+    pub fn simulate(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.contract.simulate(fn_name, args, options)
+    }
+
+    pub fn watch_event(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        // TODO: change ok return value into an "unwatch" function
+        self.contract.watch_event(fn_name, args, options)
+    }
+
+    pub fn write(
+        &self,
+        fn_name: &str,
+        args: &JsValue,
+        options: &JsValue,
+    ) -> Result<JsValue, JsValue> {
+        self.contract.run(&self.write_obj, fn_name, args, options)
+    }
+}
