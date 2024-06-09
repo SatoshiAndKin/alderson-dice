@@ -42,7 +42,7 @@ fn App() -> impl IntoView {
     let (count, set_count) = create_signal(0);
     let (chain_id, set_chain_id) = create_signal("".to_string());
     let (accounts, set_accounts) = create_signal(Vec::new());
-    let (provider, set_provider) = create_signal(None);
+    let (provider, set_provider) = create_signal::<Option<eip1193::EIP1193Provider>>(None);
     let (public_client, set_public_client) = create_signal(defaultPublicClient.clone());
     let (wallet_client, set_wallet_client) = create_signal::<Option<ViemWalletClient>>(None);
     let (latest_block_head, set_latest_block_header) =
@@ -249,6 +249,7 @@ fn App() -> impl IntoView {
                     *lock = (sub, public.inner());
                 }
 
+                // TODO: move this to a different action
                 // TODO: what eip?
                 // TODO: DRY. this same code is in the provider, but we do need it here too
                 let accounts = provider
@@ -346,6 +347,10 @@ fn App() -> impl IntoView {
 
                                 // we call dispatch because we might start with the wallet already being connected. i don't love this
 
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
                                 // a button that requests the arbitrum provider when clicked
                                 // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
                                 // TODO: should also let the user use other wallets like with walletconnect
@@ -376,20 +381,18 @@ fn App() -> impl IntoView {
                 <article>
                     <div>"Block Number: " {block_number}</div>
                     <div>
-                        "Block Timestamp: " // TODO: component for the block age
-                        {block_timestamp}
+                        // TODO: component for the block age
+                        "Block Timestamp: " {block_timestamp}
                     </div>
                     <div>
-                        "Block Hash: " // TODO: component for the block hash
-                        {block_hash}
+                        // TODO: component for the block hash
+                        "Block Hash: " {block_hash}
                     </div>
                 </article>
 
-                <article>"NFT Contract: " {move || { format!("{:?}", nft_contract()) }}
-                </article>
+                <article>"NFT Contract: " {move || { format!("{:?}", nft_contract()) }}</article>
 
-                <article>"Game Contract: " {move || { format!("{:?}", game_contract()) }}
-                </article>
+                <article>"Game Contract: " {move || { format!("{:?}", game_contract()) }}</article>
 
                 <article>"Total Dice: " "???"</article>
 
@@ -400,8 +403,8 @@ fn App() -> impl IntoView {
                 </article>
 
                 <article>
-                    "Other Account's Dice: " // TODO: component to prompt for accounts to watch
-                    "???"
+                    // TODO: component to prompt for accounts to watch
+                    "Other Account's Dice: " "???"
                 </article>
             </Show>
 
@@ -419,8 +422,8 @@ fn App() -> impl IntoView {
                 <article>"Favorite Dice: " "???"</article>
 
                 <article>
-                    "Balances: " // TODO: component for balances
-                    "???"
+                    // TODO: component for balances
+                    "Balances: " "???"
                 </article>
 
                 // TODO: component for buying dice
