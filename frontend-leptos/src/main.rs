@@ -3,8 +3,9 @@ pub mod eip6963;
 pub mod viem;
 
 use derive_more::From;
-use js_sys::{BigInt, Promise, Reflect};
+use js_sys::{Array, BigInt, Reflect};
 use leptos::{logging::log, *};
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::{collections::HashMap, rc::Rc};
 use viem::{ReadAndWriteContract, ReadOnlyContract, ViemPublicClient, ViemWalletClient};
@@ -55,19 +56,21 @@ fn App() -> impl IntoView {
     // TODO: i think these should maybe be moved into their own components
     let (count, set_count) = create_signal(0);
 
+    let (all_providers, set_all_providers) = create_signal(Vec::new());
+
     // TODO: i want this to be a resource except for the fact that we call set_chain_id inside a callback
     // TODO: maybe that callback should be rewritten to instead call refetch on this? that doesn't seem right either
-    let (chain_id, set_chain_id) = create_signal("".to_string());
     let (selected_provider, set_selected_provider) =
         create_signal::<Option<eip1193::EIP1193Provider>>(None);
+
+    let (chain_id, set_chain_id) = create_signal("".to_string());
     let (public_client, set_public_client) = create_signal(defaultPublicClient.clone());
     let (wallet_client, set_wallet_client) = create_signal::<Option<ViemWalletClient>>(None);
+
     let (latest_block_head, set_latest_block_header) =
         create_signal::<Option<HashMap<String, JsValue>>>(None);
 
-    let all_providers = Rc::new(Mutex::new(Vec::new()));
-
-    let block_number = move || {
+    let latest_block_number = move || {
         if let Some(block) = latest_block_head() {
             if let Some(number) = block.get("number") {
                 let number = number.dyn_ref::<BigInt>().expect("timestamp is bigint");
@@ -83,7 +86,7 @@ fn App() -> impl IntoView {
         }
     };
 
-    let block_timestamp = move || {
+    let latest_block_timestamp = move || {
         if let Some(block) = latest_block_head() {
             if let Some(timestamp) = block.get("timestamp") {
                 let timestamp = timestamp.dyn_ref::<BigInt>().expect("timestamp is bigint");
@@ -99,7 +102,7 @@ fn App() -> impl IntoView {
         }
     };
 
-    let block_hash = move || {
+    let latest_block_hash = move || {
         if let Some(block) = latest_block_head() {
             if let Some(x) = block.get("hash") {
                 let x = x.as_string().expect("blockhash is not a string");
@@ -189,21 +192,21 @@ fn App() -> impl IntoView {
 
         logging::log!("{:?}", provider);
 
-        {
-            let mut lock = all_providers.lock().unwrap();
-
+        set_all_providers.update(|x| {
+            // TODO: this should probably get the whole eip6963 object
             // TODO: de-dupe?
-            lock.push(provider);
+            x.push(provider);
 
-            match lock.len() {
-                0 => set_selected_provider(None),
-                1 => set_selected_provider(lock.first().cloned()),
+            match x.len() {
+                0 => unimplemented!(),
+                1 => set_selected_provider(x.first().cloned()),
                 _ => {
-                    log!("multiple providers are not supported yet. using the first one");
-                    set_selected_provider(lock.first().cloned());
+                    log!(
+                        "multiple providers are not supported yet. continuing to use the first one"
+                    );
                 }
             }
-        }
+        });
     }) as Box<dyn FnMut(_)>);
 
     // TODO: this action feels wrong. we fire it from a button press but also from an event listener
@@ -300,8 +303,8 @@ fn App() -> impl IntoView {
 
     // TODO: shame we don't have automatic types on this
     let total_dice = create_resource(
-        move || (nft_contract(), latest_block_head()),
-        |(nft_contract, latest_block_head)| async move {
+        move || (nft_contract(), latest_block_hash()),
+        |(nft_contract, block_hash)| async move {
             // TODO: subscribe to logs here. not sure how to have that signal write to this
 
             // TODO: what option do we add to include this block number/hash in the query
@@ -317,6 +320,98 @@ fn App() -> impl IntoView {
             let total_dice = total_dice.to_string(10).unwrap();
 
             format!("{}", total_dice)
+        },
+    );
+
+    #[derive(Debug, Deserialize, Serialize)]
+    struct DiceColor {
+        id: usize,
+        name: String,
+        symbol: String,
+    }
+
+    let dice_colors = create_resource(game_contract, |game_contract| async move {
+        let num_colors = game_contract
+            .read("NUM_COLORS", &JsValue::undefined(), &JsValue::undefined())
+            .await
+            .expect("failed to get num colors")
+            .dyn_into::<BigInt>()
+            .expect("num colors is not a BigInt");
+
+        let num_colors = num_colors.to_string(10).unwrap();
+
+        log!("num colors: {}", num_colors);
+
+        // TODO: wtf is this. this can't be the right way to handle these numbers
+        let num_colors = num_colors
+            .as_string()
+            .expect("color as string")
+            .parse::<usize>()
+            .expect("num colors is not a usize");
+
+        // TODO: do these concurrently
+        let mut dice = Vec::<DiceColor>::with_capacity(num_colors);
+        for i in 0..num_colors {
+            let params = Array::new();
+
+            params.push(&JsValue::from(i));
+
+            // TODO: is there a better way to turn an array into the color?
+            let mut die_info = game_contract
+                .read("dice", &params.into(), &JsValue::undefined())
+                .await
+                .expect("failed to get color")
+                .dyn_into::<Array>()
+                .expect("color is not an array")
+                .iter()
+                .map(|x| x.as_string().expect("color info should be strings"))
+                .collect::<Vec<String>>();
+
+            let name = die_info.pop().expect("no name");
+            let symbol = die_info.pop().expect("no symbol");
+
+            let color = DiceColor {
+                id: i,
+                name,
+                symbol,
+            };
+
+            dice.push(color);
+        }
+
+        log!("dice: {:?}", dice);
+
+        dice
+    });
+
+    let current_bag = create_resource(
+        move || (game_contract(), latest_block_number()),
+        |(game_contract, latest_block_number)| async move {
+            if let Some(latest_block_number) = latest_block_number {
+                let current_bag = game_contract
+                    .read("currentBag", &JsValue::undefined(), &JsValue::undefined())
+                    .await
+                    .expect("failed to get current bag");
+
+                let current_bag = current_bag
+                    .dyn_into::<Array>()
+                    .expect("current bag is not an array");
+
+                let current_bag: Vec<String> = current_bag
+                    .iter()
+                    .map(|x| {
+                        let x = x
+                            .dyn_into::<BigInt>()
+                            .expect("current bag item is not a BigInt");
+
+                        format!("{}", x.to_string(10).unwrap())
+                    })
+                    .collect();
+
+                current_bag
+            } else {
+                vec![]
+            }
         },
     );
 
@@ -350,8 +445,12 @@ fn App() -> impl IntoView {
                 </button>
             </article>
 
-            <Show when=move || { selected_provider().is_some() } fallback=|| view! { <UnsupportedBrowser/> }>
+            <Show
+                when=move || { selected_provider().is_some() }
+                fallback=|| view! { <UnsupportedBrowser/> }
+            >
                 <article>
+
                     {
                         let provider: eip1193::EIP1193Provider = selected_provider().unwrap();
                         let disconnect_chain_args = (
@@ -365,9 +464,9 @@ fn App() -> impl IntoView {
                             ARBITRUM_CHAIN_ID.to_string(),
                         );
                         if chain_id() == ARBITRUM_CHAIN_ID {
-                            // we call dispatch because we might start with the wallet already being connected. i don't love this
                             switch_chain.dispatch(switch_chain_args);
                             view! {
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
                                 // TODO: don't call chain_id twice? use a resource? is that the right term?
 
                                 // TODO: dropdown to change the chain?
@@ -384,6 +483,13 @@ fn App() -> impl IntoView {
                                 .into_view()
                         } else {
                             view! {
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // TODO: dropdown to change the chain?
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
                                 // a button that requests the arbitrum provider and accounts when clicked
                                 // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
                                 // TODO: should also let the user use other wallets like with walletconnect
@@ -413,14 +519,14 @@ fn App() -> impl IntoView {
 
             <Show when=move || { latest_block_head().is_some() }>
                 <article>
-                    <div>"Block Number: " {block_number}</div>
+                    <div>"Block Number: " {latest_block_number}</div>
                     <div>
                         // TODO: component for the block age
-                        "Block Timestamp: " {block_timestamp}
+                        "Block Timestamp: " {latest_block_timestamp}
                     </div>
                     <div>
                         // TODO: component for the block hash
-                        "Block Hash: " {block_hash}
+                        "Block Hash: " {latest_block_hash}
                     </div>
                 </article>
 
@@ -431,10 +537,16 @@ fn App() -> impl IntoView {
                 // TODO: loading spinner
                 <article>"Total Dice: " {total_dice}</article>
 
+                // <article>"Dice Colors: " {dice_colors}</article>
+
+                // TODO: loading spinner
+                // TODO: animation every change
                 <article>
                     "This block's dice: "
                     // TODO: component for the game's current bag according to the current block
-                    "???"
+                    <ol>
+                        {current_bag().into_iter().map(|n| view! { <li>{n}</li> }).collect_view()}
+                    </ol>
                 </article>
 
                 <article>
