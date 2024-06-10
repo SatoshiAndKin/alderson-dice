@@ -15,7 +15,8 @@ function chainIdToChain(chainId): Chain {
     case "0x1337":
       return localhost;
     case "0x2105":
-      return base;
+      // TODO: why isn't the type here happy?
+      return base as Chain;
     case "0xa4b1":
       return arbitrum;
     default: throw new Error(`Unsupported chain ID: ${chainId}`)
