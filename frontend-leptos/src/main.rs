@@ -43,6 +43,13 @@ impl Contract {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+struct DiceColor {
+    id: usize,
+    name: String,
+    symbol: String,
+}
+
 #[component]
 fn App() -> impl IntoView {
     let window = window().expect("no global `window` exists");
@@ -323,13 +330,6 @@ fn App() -> impl IntoView {
         },
     );
 
-    #[derive(Debug, Deserialize, Serialize)]
-    struct DiceColor {
-        id: usize,
-        name: String,
-        symbol: String,
-    }
-
     let dice_colors = create_resource(game_contract, |game_contract| async move {
         let num_colors = game_contract
             .read("NUM_COLORS", &JsValue::undefined(), &JsValue::undefined())
@@ -367,9 +367,10 @@ fn App() -> impl IntoView {
                 .map(|x| x.as_string().expect("color info should be strings"))
                 .collect::<Vec<String>>();
 
-            let name = die_info.pop().expect("no name");
             let symbol = die_info.pop().expect("no symbol");
+            let name = die_info.pop().expect("no name");
 
+            // TODO: put this in an Rc?
             let color = DiceColor {
                 id: i,
                 name,
@@ -384,34 +385,41 @@ fn App() -> impl IntoView {
         dice
     });
 
+    // TODO: this is probably not the right way to pass dice_colors through. but calling it fails
     let current_bag = create_resource(
-        move || (game_contract(), latest_block_number()),
-        |(game_contract, latest_block_number)| async move {
-            if let Some(latest_block_number) = latest_block_number {
-                let current_bag = game_contract
-                    .read("currentBag", &JsValue::undefined(), &JsValue::undefined())
-                    .await
-                    .expect("failed to get current bag");
+        move || (game_contract(), latest_block_number(), dice_colors()),
+        |(game_contract, latest_block_number, dice_colors)| async move {
+            let latest_block_number = latest_block_number.unwrap();
+            let dice_colors = dice_colors.unwrap();
 
-                let current_bag = current_bag
-                    .dyn_into::<Array>()
-                    .expect("current bag is not an array");
+            let dice = game_contract
+                .read("currentBag", &JsValue::undefined(), &JsValue::undefined())
+                .await
+                .expect("failed to get current bag")
+                .dyn_into::<Array>()
+                .expect("current bag is not an array")
+                .into_iter()
+                .map(|x| {
+                    // TODO: there has to be a better way
+                    let color_id = x
+                        .dyn_into::<BigInt>()
+                        .expect("current bag item is not a BigInt")
+                        .to_string(10)
+                        .unwrap()
+                        .as_string()
+                        .expect("current bag bigint is not a string")
+                        .parse::<usize>()
+                        .expect("curent bag string is not a usize")
+                        % dice_colors.len();
 
-                let current_bag: Vec<String> = current_bag
-                    .iter()
-                    .map(|x| {
-                        let x = x
-                            .dyn_into::<BigInt>()
-                            .expect("current bag item is not a BigInt");
+                    // TODO: get the dice_colors from the other resource
 
-                        format!("{}", x.to_string(10).unwrap())
-                    })
-                    .collect();
+                    dice_colors[color_id].clone()
+                })
+                .collect::<Vec<_>>();
 
-                current_bag
-            } else {
-                vec![]
-            }
+            // TODO: attach the colors to these dice
+            dice
         },
     );
 
@@ -537,17 +545,29 @@ fn App() -> impl IntoView {
                 // TODO: loading spinner
                 <article>"Total Dice: " {total_dice}</article>
 
-                // <article>"Dice Colors: " {dice_colors}</article>
+                // <article>"Dice Colors: " {move || format!("{:?}", dice_colors())}</article>
 
                 // TODO: loading spinner
                 // TODO: animation every change
-                <article>
-                    "This block's dice: "
-                    // TODO: component for the game's current bag according to the current block
-                    <ol>
-                        {current_bag().into_iter().map(|n| view! { <li>{n}</li> }).collect_view()}
-                    </ol>
-                </article>
+                <Show
+                    when=move || { current_bag().is_some() }
+                    fallback=|| view! { <article>"Block's dice are loading..."</article> }
+                >
+                    <article>
+                        "This block's dice: "
+                        // TODO: component for the game's current bag according to the current block
+                        {
+                            let current_bag = current_bag().unwrap();
+
+                            // TODO: is the bag giving us a dice id? if so, then we need to turn that into a color
+                            // TODO: on-hover show the color name and pips
+                            // TODO: show the number rolled on top of each die
+                            current_bag.into_iter().map(|dice_color| {
+                                view! { {&dice_color.symbol} " " }
+                            }).collect_view()
+                        }
+                    </article>
+                </Show>
 
                 <article>
                     // TODO: component to prompt for accounts to watch

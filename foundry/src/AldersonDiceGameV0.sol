@@ -144,8 +144,8 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     /// TODO: do we want to somehow blind this until after the dice is buyDiceed? that would require more state
     /// this is here so that the game logic can upgrade but colors won't change
     /// @dev colors should NOT change with the version changing!
-    function color(uint256 diceId) public view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(address(nft), diceId))) % NUM_COLORS;
+    function color(uint256 diceId) public pure returns (uint256) {
+        return diceId % NUM_COLORS;
     }
 
     function tokenURI(uint256 id) public view returns (string memory) {
