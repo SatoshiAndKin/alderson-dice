@@ -3,7 +3,7 @@ pub mod eip6963;
 pub mod viem;
 
 use derive_more::From;
-use js_sys::{Array, BigInt, Reflect};
+use js_sys::{Array, BigInt, Object, Reflect};
 use leptos::{logging::log, *};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -15,6 +15,9 @@ use web_sys::window;
 // TODO: make it easier to switch to dev chain. maybe only if theres a custom param in the url
 const ARBITRUM_CHAIN_ID: &str = "0xa4b1";
 
+// TODO: get this from the build artifacts
+const NFT_ADDRESS: &str = "0xFFA4DB58Ad08525dFeB232858992047ECab26e95";
+
 fn main() {
     console_error_panic_hook::set_once();
 
@@ -25,6 +28,7 @@ fn main() {
 
 #[derive(Clone, Debug, From, PartialEq)]
 enum Contract {
+    None,
     ReadOnly(ReadOnlyContract),
     ReadAndWrite(ReadAndWriteContract),
 }
@@ -37,10 +41,25 @@ impl Contract {
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         match self {
-            Contract::ReadOnly(x) => x.read(fn_name, args, options).await,
-            Contract::ReadAndWrite(x) => x.read(fn_name, args, options).await,
+            Contract::None => Err(JsValue::from_str("no contract")),
+            Contract::ReadOnly(contract) => contract.read(fn_name, args, options).await,
+            Contract::ReadAndWrite(contract) => contract.read(fn_name, args, options).await,
         }
     }
+
+    // pub fn public_client(&self) -> JsValue {
+    //     match self {
+    //         Contract::ReadOnly(contract) => contract.public_client.clone(),
+    //         Contract::ReadAndWrite(contract) => contract.public_client.clone(),
+    //     }
+    // }
+
+    // pub fn wallet_client(&self) -> Option<JsValue> {
+    //     match self {
+    //         Contract::ReadOnly(_) => None,
+    //         Contract::ReadAndWrite(contract) => Some(contract.wallet_client.clone()),
+    //     }
+    // }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -48,6 +67,7 @@ struct DiceColor {
     id: usize,
     name: String,
     symbol: String,
+    pips: Vec<String>,
 }
 
 #[component]
@@ -127,41 +147,68 @@ fn App() -> impl IntoView {
         let public_inner = public_client.with(|x| x.inner());
 
         if let Some(wallet) = wallet_client() {
-            let nftContract = nftContract(public_inner, wallet.inner());
+            let wallet_inner = wallet.inner();
+
+            let nftContract = nftContract(
+                public_inner.clone(),
+                wallet_inner.clone(),
+                NFT_ADDRESS.to_string(),
+            );
 
             // TODO: type specific to the game contract
             let nftContract = ReadAndWriteContract::new(nftContract);
 
-            Contract::from(nftContract)
+            Contract::ReadAndWrite(nftContract)
         } else {
-            let nftContract = nftContract(public_inner, JsValue::undefined());
+            let nftContract = nftContract(
+                public_inner.clone(),
+                JsValue::undefined(),
+                NFT_ADDRESS.to_string(),
+            );
 
             let nftContract = ReadOnlyContract::new(nftContract);
 
-            Contract::from(nftContract)
+            Contract::ReadOnly(nftContract)
         }
     };
+
+    let game_contract_address = create_resource(nft_contract, |nft_contract| async move {
+        nft_contract
+            .read("gameLogic", &JsValue::undefined(), &JsValue::undefined())
+            .await
+            .expect("failed to get game logic")
+            .as_string()
+            .expect("game logic is not a string")
+    });
 
     let game_contract = move || {
         let public_inner = public_client.with(|x| x.inner());
 
-        if let Some(wallet) = wallet_client() {
-            // TODO: get the game address from the nft contract
-            let gameContract = gameContract(public_inner, wallet.inner());
+        match (game_contract_address(), wallet_client()) {
+            (Some(game_contract_address), Some(wallet_client)) => {
+                let nftContract = gameContract(
+                    public_inner.clone(),
+                    wallet_client.inner(),
+                    game_contract_address,
+                );
 
-            let gameContract = ReadAndWriteContract::new(gameContract);
+                // TODO: type specific to the game contract
+                let nftContract = ReadAndWriteContract::new(nftContract);
 
-            // TODO: type specific to the game contract
+                Contract::ReadAndWrite(nftContract)
+            }
+            (Some(game_contract_address), None) => {
+                let nftContract = gameContract(
+                    public_inner.clone(),
+                    JsValue::undefined(),
+                    game_contract_address,
+                );
 
-            Contract::from(gameContract)
-        } else {
-            let gameContract = gameContract(public_inner, JsValue::undefined());
+                let nftContract = ReadOnlyContract::new(nftContract);
 
-            let gameContract = ReadOnlyContract::new(gameContract);
-
-            // TODO: type specific to the game contract
-
-            Contract::from(gameContract)
+                Contract::ReadOnly(nftContract)
+            }
+            _ => Contract::None,
         }
     };
 
@@ -331,50 +378,47 @@ fn App() -> impl IntoView {
     );
 
     let dice_colors = create_resource(game_contract, |game_contract| async move {
-        let num_colors = game_contract
-            .read("NUM_COLORS", &JsValue::undefined(), &JsValue::undefined())
-            .await
-            .expect("failed to get num colors")
-            .dyn_into::<BigInt>()
-            .expect("num colors is not a BigInt");
-
-        let num_colors = num_colors.to_string(10).unwrap();
-
-        log!("num colors: {}", num_colors);
-
-        // TODO: wtf is this. this can't be the right way to handle these numbers
-        let num_colors = num_colors
-            .as_string()
-            .expect("color as string")
-            .parse::<usize>()
-            .expect("num colors is not a usize");
-
         // TODO: do these concurrently
-        let mut dice = Vec::<DiceColor>::with_capacity(num_colors);
-        for i in 0..num_colors {
-            let params = Array::new();
+        let mut dice = Vec::<DiceColor>::new();
 
-            params.push(&JsValue::from(i));
+        // TODO: is there a better way to turn an array into the color?
+        let die_info = game_contract
+            .read("allDice", &JsValue::undefined(), &JsValue::undefined())
+            .await
+            .expect("failed to get all dice")
+            .dyn_into::<Array>()
+            .expect("color is not an array");
 
-            // TODO: is there a better way to turn an array into the color?
-            let mut die_info = game_contract
-                .read("dice", &params.into(), &JsValue::undefined())
-                .await
-                .expect("failed to get color")
+        // TODO: wat? where are the pips?
+        log!("die_info: {:?}", die_info);
+
+        for (i, d) in die_info.into_iter().enumerate() {
+            let d = d.dyn_into::<Object>().expect("d is not an object");
+
+            let name = Reflect::get(&d, &"name".into())
+                .expect("name is not present")
+                .as_string()
+                .expect("name should be a string");
+
+            let symbol = Reflect::get(&d, &"symbol".into())
+                .expect("symbol is not present")
+                .as_string()
+                .expect("symbol should be a string");
+
+            // TODO: converting through f64? eww why
+            let pips = Reflect::get(&d, &"pips".into())
+                .expect("pips is not present")
                 .dyn_into::<Array>()
-                .expect("color is not an array")
-                .iter()
-                .map(|x| x.as_string().expect("color info should be strings"))
-                .collect::<Vec<String>>();
+                .expect("pips is not an array")
+                .into_iter()
+                .map(|x| x.as_f64().expect("pip is not a number").to_string())
+                .collect::<Vec<_>>();
 
-            let symbol = die_info.pop().expect("no symbol");
-            let name = die_info.pop().expect("no name");
-
-            // TODO: put this in an Rc?
             let color = DiceColor {
                 id: i,
                 name,
                 symbol,
+                pips,
             };
 
             dice.push(color);
@@ -389,37 +433,38 @@ fn App() -> impl IntoView {
     let current_bag = create_resource(
         move || (game_contract(), latest_block_number(), dice_colors()),
         |(game_contract, latest_block_number, dice_colors)| async move {
-            let latest_block_number = latest_block_number.unwrap();
-            let dice_colors = dice_colors.unwrap();
+            match (latest_block_number, dice_colors) {
+                (Some(latest_block_number), Some(dice_colors)) => {
+                    let current_bag = game_contract
+                        .read("currentBag", &JsValue::undefined(), &JsValue::undefined())
+                        .await
+                        .expect("failed to get current bag")
+                        .dyn_into::<Array>()
+                        .expect("current bag is not an array")
+                        .into_iter()
+                        .map(|x| {
+                            // TODO: there has to be a better way
+                            let color_id = x
+                                .dyn_into::<BigInt>()
+                                .expect("current bag item is not a BigInt")
+                                .to_string(10)
+                                .unwrap()
+                                .as_string()
+                                .expect("current bag bigint is not a string")
+                                .parse::<usize>()
+                                .expect("curent bag string is not a usize")
+                                % dice_colors.len();
 
-            let dice = game_contract
-                .read("currentBag", &JsValue::undefined(), &JsValue::undefined())
-                .await
-                .expect("failed to get current bag")
-                .dyn_into::<Array>()
-                .expect("current bag is not an array")
-                .into_iter()
-                .map(|x| {
-                    // TODO: there has to be a better way
-                    let color_id = x
-                        .dyn_into::<BigInt>()
-                        .expect("current bag item is not a BigInt")
-                        .to_string(10)
-                        .unwrap()
-                        .as_string()
-                        .expect("current bag bigint is not a string")
-                        .parse::<usize>()
-                        .expect("curent bag string is not a usize")
-                        % dice_colors.len();
+                            // TODO: get the dice_colors from the other resource
 
-                    // TODO: get the dice_colors from the other resource
+                            dice_colors[color_id].clone()
+                        })
+                        .collect::<Vec<_>>();
 
-                    dice_colors[color_id].clone()
-                })
-                .collect::<Vec<_>>();
-
-            // TODO: attach the colors to these dice
-            dice
+                    Some(current_bag)
+                }
+                _ => None,
+            }
         },
     );
 
@@ -498,6 +543,13 @@ fn App() -> impl IntoView {
 
                                 // we call dispatch because we might start with the wallet already being connected. i don't love this
 
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // TODO: dropdown to change the chain?
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
                                 // a button that requests the arbitrum provider and accounts when clicked
                                 // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
                                 // TODO: should also let the user use other wallets like with walletconnect
@@ -550,22 +602,29 @@ fn App() -> impl IntoView {
                 // TODO: loading spinner
                 // TODO: animation every change
                 <Show
-                    when=move || { current_bag().is_some() }
+                    when=move || { current_bag().map(|x| x.is_some()).unwrap_or(false) }
                     fallback=|| view! { <article>"Block's dice are loading..."</article> }
                 >
                     <article>
                         "This block's dice: "
                         // TODO: component for the game's current bag according to the current block
-                        {
-                            let current_bag = current_bag().unwrap();
 
-                            // TODO: is the bag giving us a dice id? if so, then we need to turn that into a color
-                            // TODO: on-hover show the color name and pips
-                            // TODO: show the number rolled on top of each die
-                            current_bag.into_iter().map(|dice_color| {
-                                view! { {&dice_color.symbol} " " }
-                            }).collect_view()
+                        {
+                            let current_bag = current_bag().unwrap().unwrap();
+                            current_bag
+                                .into_iter()
+                                .map(|dice_color| {
+                                    view! {
+                                        // TODO: is the bag giving us a dice id? if so, then we need to turn that into a color
+                                        // TODO: on-hover show the color name and pips
+                                        // TODO: show the number rolled on top of each die
+                                        {&dice_color.symbol}
+                                        " "
+                                    }
+                                })
+                                .collect_view()
                         }
+
                     </article>
                 </Show>
 
@@ -637,7 +696,7 @@ extern "C" {
 
     fn createWalletClientForChain(chainId: String, eip1193Provider: JsValue) -> JsValue;
 
-    fn nftContract(publicClient: JsValue, walletClient: JsValue) -> JsValue;
+    fn nftContract(publicClient: JsValue, walletClient: JsValue, address: String) -> JsValue;
 
-    fn gameContract(publicClient: JsValue, walletClient: JsValue) -> JsValue;
+    fn gameContract(publicClient: JsValue, walletClient: JsValue, address: String) -> JsValue;
 }

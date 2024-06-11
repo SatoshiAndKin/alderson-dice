@@ -1,7 +1,7 @@
 import { Chain, http, custom, createPublicClient, createWalletClient, fallback, getContract } from 'viem'
 import { arbitrum, base, localhost, mainnet } from 'viem/chains'
 
-import { abi as gameAbi } from "./AldersonDiceGameV1.json";
+import { abi as gameAbi } from "./AldersonDiceGameV0.json";
 import { abi as nftAbi } from "./AldersonDiceNFT.json";
 
 export function hello() {
@@ -57,7 +57,7 @@ export function createWalletClientForChain(chainId, eip1193Provider) {
   return walletClient;
 };
 
-export function nftContract(publicClient, walletClient) {
+export function nftContract(publicClient, walletClient, address) {
   let client;
 
   if (walletClient === undefined) {
@@ -70,14 +70,13 @@ export function nftContract(publicClient, walletClient) {
   }
 
   return getContract({
-    // TODO: probably get this from build scripts in the rust pipeline
-    address: '0xFFA4DB58Ad08525dFeB232858992047ECab26e95',
+    address,
     abi: nftAbi,
     client,
   });
 }
 
-export function gameContract(publicClient, walletClient) {
+export function gameContract(publicClient, walletClient, address) {
   let client;
 
   if (walletClient === undefined) {
@@ -90,8 +89,7 @@ export function gameContract(publicClient, walletClient) {
   }
 
   return getContract({
-    // TODO: probably get this from build scripts in the rust pipeline
-    address: '0xD77ce58aC199eA67CD2a86230e02FA679920828F',
+    address,
     abi: gameAbi,
     client,
   });

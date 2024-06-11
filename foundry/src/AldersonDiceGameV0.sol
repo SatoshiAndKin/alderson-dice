@@ -128,12 +128,17 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         // grime dice
         // TODO: put this into calldata instead of hard coding it here
         // TODO: what about a "re-roll" face? -1?
+        // TODO: how can we store these in an immutable?
         // taking this as calldata would be interesting, but the types get complicated
         dice[0] = DieColor([uint32(4), 4, 4, 4, 4, 9], "Red", unicode"🟥");
         dice[1] = DieColor([uint32(3), 3, 3, 3, 8, 8], "Yellow", unicode"⭐️");
         dice[2] = DieColor([uint32(2), 2, 2, 7, 7, 7], "Blue", unicode"🔷");
         dice[3] = DieColor([uint32(1), 1, 6, 6, 6, 6], "Magenta", unicode"💜");
         dice[4] = DieColor([uint32(0), 5, 5, 5, 5, 5], "Olive", unicode"🫒");
+    }
+
+    function allDice() public view returns (DieColor[NUM_COLORS] memory) {
+        return dice;
     }
 
     // this probably won't ever be needed, but just in case, anyone can set infinite approvals for the vault to take our prize tokens
