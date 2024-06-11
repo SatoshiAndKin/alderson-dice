@@ -200,8 +200,8 @@ contract AldersonDiceGameV0Test is Test {
 
     function test_twoBagSkirmish() public {
         // remember, dieIds start at 1, but colors start at 0!
-        uint256 die0 = 2;
-        uint256 die1 = 7;
+        uint256 die0 = 5;
+        uint256 die1 = 4;
 
         console.log("die0", die0);
         console.log("die1", die1);

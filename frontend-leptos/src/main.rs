@@ -545,7 +545,7 @@ fn App() -> impl IntoView {
                 // TODO: loading spinner
                 <article>"Total Dice: " {total_dice}</article>
 
-                // <article>"Dice Colors: " {move || format!("{:?}", dice_colors())}</article>
+                <article>"Dice Colors: " {move || format!("{:?}", dice_colors())}</article>
 
                 // TODO: loading spinner
                 // TODO: animation every change
