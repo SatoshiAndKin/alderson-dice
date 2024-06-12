@@ -28,7 +28,6 @@ fn main() {
 
 #[derive(Clone, Debug, From, PartialEq)]
 enum Contract {
-    None,
     ReadOnly(ReadOnlyContract),
     ReadAndWrite(ReadAndWriteContract),
 }
@@ -41,9 +40,30 @@ impl Contract {
         options: &JsValue,
     ) -> Result<JsValue, JsValue> {
         match self {
-            Contract::None => Err(JsValue::from_str("no contract")),
             Contract::ReadOnly(contract) => contract.read(fn_name, args, options).await,
             Contract::ReadAndWrite(contract) => contract.read(fn_name, args, options).await,
+        }
+    }
+
+    pub fn address(&self) -> Option<String> {
+        let inner = self.inner_ref();
+
+        Reflect::get(inner, &"address".into())
+            .expect("failed to get address")
+            .as_string()
+    }
+
+    pub fn inner(&self) -> JsValue {
+        match self {
+            Contract::ReadOnly(contract) => contract.inner.clone(),
+            Contract::ReadAndWrite(contract) => contract.inner(),
+        }
+    }
+
+    pub fn inner_ref(&self) -> &JsValue {
+        match self {
+            Contract::ReadOnly(contract) => &contract.inner,
+            Contract::ReadAndWrite(contract) => contract.inner_ref(),
         }
     }
 
@@ -72,7 +92,7 @@ struct DiceColor {
 
 #[component]
 fn App() -> impl IntoView {
-    let window = window().expect("no global `window` exists");
+    let the_window = window().expect("no global `window` exists");
 
     let x = hello();
     log!("{:?}", x);
@@ -146,7 +166,7 @@ fn App() -> impl IntoView {
     let nft_contract = move || {
         let public_inner = public_client.with(|x| x.inner());
 
-        if let Some(wallet) = wallet_client() {
+        let contract = if let Some(wallet) = wallet_client() {
             let wallet_inner = wallet.inner();
 
             let nftContract = nftContract(
@@ -169,7 +189,20 @@ fn App() -> impl IntoView {
             let nftContract = ReadOnlyContract::new(nftContract);
 
             Contract::ReadOnly(nftContract)
-        }
+        };
+
+        let the_window = window().expect("no window");
+
+        Reflect::set(&the_window, &"nftContract".into(), &contract.inner())
+            .expect("failed to set nft contract");
+
+        contract
+    };
+
+    let nft_contract_address = move || {
+        nft_contract()
+            .address()
+            .expect("this will always have an address")
     };
 
     let game_contract_address = create_resource(nft_contract, |nft_contract| async move {
@@ -195,7 +228,7 @@ fn App() -> impl IntoView {
                 // TODO: type specific to the game contract
                 let nftContract = ReadAndWriteContract::new(nftContract);
 
-                Contract::ReadAndWrite(nftContract)
+                Some(Contract::ReadAndWrite(nftContract))
             }
             (Some(game_contract_address), None) => {
                 let nftContract = gameContract(
@@ -206,9 +239,9 @@ fn App() -> impl IntoView {
 
                 let nftContract = ReadOnlyContract::new(nftContract);
 
-                Contract::ReadOnly(nftContract)
+                Some(Contract::ReadOnly(nftContract))
             }
-            _ => Contract::None,
+            _ => None,
         }
     };
 
@@ -382,7 +415,7 @@ fn App() -> impl IntoView {
         let mut dice = Vec::<DiceColor>::new();
 
         // TODO: is there a better way to turn an array into the color?
-        let die_info = game_contract
+        let die_info = game_contract?
             .read("allDice", &JsValue::undefined(), &JsValue::undefined())
             .await
             .expect("failed to get all dice")
@@ -426,15 +459,15 @@ fn App() -> impl IntoView {
 
         log!("dice: {:?}", dice);
 
-        dice
+        Some(dice)
     });
 
     // TODO: this is probably not the right way to pass dice_colors through. but calling it fails
     let current_bag = create_resource(
         move || (game_contract(), latest_block_number(), dice_colors()),
         |(game_contract, latest_block_number, dice_colors)| async move {
-            match (latest_block_number, dice_colors) {
-                (Some(latest_block_number), Some(dice_colors)) => {
+            match (game_contract, latest_block_number, dice_colors) {
+                (Some(game_contract), Some(latest_block_number), Some(Some(dice_colors))) => {
                     let current_bag = game_contract
                         .read("currentBag", &JsValue::undefined(), &JsValue::undefined())
                         .await
@@ -470,7 +503,7 @@ fn App() -> impl IntoView {
 
     let announce_provider_callback = announce_provider_callback.into_js_value();
 
-    window
+    the_window
         .add_event_listener_with_callback(
             "eip6963:announceProvider",
             announce_provider_callback.unchecked_ref(),
@@ -480,7 +513,7 @@ fn App() -> impl IntoView {
     let request_provider_event = web_sys::CustomEvent::new("eip6963:requestProvider")
         .expect("failed to create custom event");
 
-    window
+    the_window
         .dispatch_event(&request_provider_event)
         .expect("failed to dispatch event");
 
@@ -590,48 +623,51 @@ fn App() -> impl IntoView {
                     </div>
                 </article>
 
-                <article>"NFT Contract: " {move || { format!("{:?}", nft_contract()) }}</article>
+                <article>"NFT Contract: " {move || { format!("{} - {:?}", nft_contract_address(), nft_contract()) }}</article>
 
-                <article>"Game Contract: " {move || { format!("{:?}", game_contract()) }}</article>
-
-                // TODO: loading spinner
                 <article>"Total Dice: " {total_dice}</article>
 
-                <article>"Dice Colors: " {move || format!("{:?}", dice_colors())}</article>
+                <Show when=move || game_contract().is_some()>
+                    <article>"Game Contract: " {move || { format!("{:?} - {:?}", game_contract_address().expect("game_contract is set so the address must be too"), game_contract()) }}</article>
+
+                    // TODO: loading spinner
+
+                    <article>"Dice Colors: " {move || format!("{:?}", dice_colors())}</article>
 
                 // TODO: loading spinner
                 // TODO: animation every change
-                <Show
-                    when=move || { current_bag().map(|x| x.is_some()).unwrap_or(false) }
-                    fallback=|| view! { <article>"Block's dice are loading..."</article> }
-                >
+                    <Show
+                        when=move || { current_bag().map(|x| x.is_some()).unwrap_or(false) }
+                        fallback=|| view! { <article>"Block's dice are loading..."</article> }
+                    >
+                        <article>
+                            "This block's dice: "
+                            // TODO: component for the game's current bag according to the current block
+
+                            {
+                                let current_bag = current_bag().unwrap().unwrap();
+                                current_bag
+                                    .into_iter()
+                                    .map(|dice_color| {
+                                        view! {
+                                            // TODO: is the bag giving us a dice id? if so, then we need to turn that into a color
+                                            // TODO: on-hover show the color name and pips
+                                            // TODO: show the number rolled on top of each die
+                                            {&dice_color.symbol}
+                                            " "
+                                        }
+                                    })
+                                    .collect_view()
+                            }
+
+                        </article>
+                    </Show>
+
                     <article>
-                        "This block's dice: "
-                        // TODO: component for the game's current bag according to the current block
-
-                        {
-                            let current_bag = current_bag().unwrap().unwrap();
-                            current_bag
-                                .into_iter()
-                                .map(|dice_color| {
-                                    view! {
-                                        // TODO: is the bag giving us a dice id? if so, then we need to turn that into a color
-                                        // TODO: on-hover show the color name and pips
-                                        // TODO: show the number rolled on top of each die
-                                        {&dice_color.symbol}
-                                        " "
-                                    }
-                                })
-                                .collect_view()
-                        }
-
+                        // TODO: component to prompt for accounts to watch
+                        "Other Account's Dice: " "???"
                     </article>
                 </Show>
-
-                <article>
-                    // TODO: component to prompt for accounts to watch
-                    "Other Account's Dice: " "???"
-                </article>
             </Show>
 
             // TODO: use `with` here?

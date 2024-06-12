@@ -156,7 +156,7 @@ impl std::fmt::Debug for ViemWalletClient {
 /// contract.(createEventFilter|getEvents|watchEvent).(eventName)(args, options)
 #[derive(Clone)]
 pub struct ReadOnlyContract {
-    inner: JsValue,
+    pub inner: JsValue,
 
     read_obj: Object,
     create_event_filter_obj: Object,
@@ -243,8 +243,11 @@ impl ReadOnlyContract {
         }
     }
 
-    pub fn inner(&self) -> JsValue {
-        self.inner.clone()
+    pub fn address(&self) -> String {
+        Reflect::get(&self.inner, &"address".into())
+            .expect("failed to get address")
+            .as_string()
+            .expect("contract should always have an address string")
     }
 
     async fn run(
@@ -350,8 +353,16 @@ impl ReadAndWriteContract {
         }
     }
 
+    pub fn address(&self) -> String {
+        self.contract.address()
+    }
+
     pub fn inner(&self) -> JsValue {
-        self.contract.inner()
+        self.contract.inner.clone()
+    }
+
+    pub fn inner_ref(&self) -> &JsValue {
+        &self.contract.inner
     }
 
     pub async fn read(
