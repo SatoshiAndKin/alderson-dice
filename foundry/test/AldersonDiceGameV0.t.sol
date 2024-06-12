@@ -163,42 +163,42 @@ contract AldersonDiceGameV0Test is Test {
         require(expectedRedeem >= amount - 1);
     }
 
-    function test_twoDiceSkirmish() public {
-        uint16 color0 = 0;
-        uint16 color1 = 4;
+    // function test_twoDiceSkirmish() public {
+    //     uint16 color0 = 0;
+    //     uint16 color1 = 4;
 
-        console.log("color0", color0);
-        console.log("color1", color1);
+    //     console.log("color0", color0);
+    //     console.log("color1", color1);
 
-        LibPRNG.PRNG memory prng;
+    //     LibPRNG.PRNG memory prng;
 
-        (string memory name0, string memory symbol0) = game.dice(color0);
-        (string memory name1, string memory symbol1) = game.dice(color1);
+    //     (string memory name0, string memory symbol0) = game.dice(color0);
+    //     (string memory name1, string memory symbol1) = game.dice(color1);
 
-        console.log("name0", name0);
-        console.log("name1", name1);
+    //     console.log("name0", name0);
+    //     console.log("name1", name1);
 
-        console.log("symbol0", symbol0);
-        console.log("symbol1", symbol1);
+    //     console.log("symbol0", symbol0);
+    //     console.log("symbol1", symbol1);
 
-        assertEq(name0, "Red", "not red");
-        assertEq(name1, "Olive", "not olive");
+    //     assertEq(name0, "Red", "not red");
+    //     assertEq(name1, "Olive", "not olive");
 
-        // color1 (olive) is stronger than color0 (red)
-        // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
-        // TODO: what are the odds that they lose?
-        // TODO: better to do do a bunch of games of 10 rounds?
-        (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishColors(prng, color0, color1, 10);
+    //     // color1 (olive) is stronger than color0 (red)
+    //     // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
+    //     // TODO: what are the odds that they lose?
+    //     // TODO: better to do do a bunch of games of 10 rounds?
+    //     (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishColors(prng, color0, color1);
 
-        console.log("wins0", wins0);
-        console.log("wins1", wins1);
-        console.log("ties", ties);
+    //     console.log("wins0", wins0);
+    //     console.log("wins1", wins1);
+    //     console.log("ties", ties);
 
-        require(wins1 > wins0, "unexpected wins");
-        require(ties < wins1, "unexpected ties");
-    }
+    //     require(wins1 > wins0, "unexpected wins");
+    //     require(ties < wins1, "unexpected ties");
+    // }
 
-    function test_twoBagSkirmish() public {
+    function test_rollDice() public view {
         // remember, dieIds start at 1, but colors start at 0!
         uint256 die0 = 5;
         uint256 die1 = 4;
@@ -206,12 +206,13 @@ contract AldersonDiceGameV0Test is Test {
         console.log("die0", die0);
         console.log("die1", die1);
 
-        uint256 color0 = game.color(die0);
-        uint256 color1 = game.color(die1);
+        uint256 color0 = game.getColor(die0);
+        uint256 color1 = game.getColor(die1);
 
         console.log("color0", color0);
         console.log("color1", color1);
 
+        // TODO: why aren't pips here?
         (string memory name0, string memory symbol0) = game.dice(color0);
         (string memory name1, string memory symbol1) = game.dice(color1);
 
@@ -238,11 +239,16 @@ contract AldersonDiceGameV0Test is Test {
         console.log("symbol0 (from die)", nft.symbol(die0));
         console.log("symbol1 (from die)", nft.symbol(die1));
 
+        LibPRNG.PRNG memory prng;
+
         // color1 (olive) is stronger than color0 (red)
         // skirmish out of 10 should be good odds. u8 max should be unlikely to fail
         // TODO: what are the odds that they lose?
         // TODO: better to do do a bunch of games of 10 rounds?
-        (uint256 wins0, uint256 wins1, uint256 ties) = game.skirmishBags(bag0, bag1, 10);
+        uint256[] memory pips0 = game.rollDice(prng, bag0);
+        uint256[] memory pips1 = game.rollDice(prng, bag1);
+
+        (uint256 wins0, uint256 wins1, uint256 ties) = game.scorePips(pips0, pips1);
 
         console.log("wins0", wins0);
         console.log("wins1", wins1);

@@ -17,8 +17,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
 
     uint256 public constant NUM_COLORS = 5;
     uint256 public constant NUM_SIDES = 6;
-    uint8 public constant NUM_ROLLS = 10;
-    uint8 public constant NUM_DICE_BAG = 12;
+    uint8 public constant NUM_DICE_BAG = 10;
 
     event FavoriteDice(address indexed player, uint256[NUM_DICE_BAG] dice);
 
@@ -50,11 +49,15 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     /// User's can withdraw this token by burning their dice
     ERC20 public immutable prizeToken;
 
+    /// @notice due to rounding in the vault, this might be slightly short of the total inputs
     uint256 public totalDiceValue = 0;
 
     /// @notice the amount of the prize token that can be withdrawn by sponsors (and the dev)
-    /// any interest earned on this token while
+    /// @notice any interest earned on these deposits are sent to the prizeFund
+    /// @notice due to rounding in the vault, this might be slightly short of the total inputs
     uint256 public totalSponsorships = 0;
+
+    /// @notice due to rounding in the vault, this might be slightly short of the total inputs
     mapping(address who => uint256 withdrawable) public sponsorships;
 
     string internal tokenURIPrefix;
@@ -70,14 +73,14 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     uint256 public immutable refundPrice;
 
     /// @notice we could just look-up odds in a table, but i think dice with pips are a lot more fun
-    struct DieColor {
+    struct DieInfo {
         uint32[NUM_SIDES] pips;
         string name;
         string symbol;
     }
 
     /// @dev the index is the "color" of the die
-    DieColor[NUM_COLORS] public dice;
+    DieInfo[NUM_COLORS] public dice;
 
     /// @dev TODO: gas golf this
     struct PlayerInfo {
@@ -89,14 +92,15 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         // uint64 losses;
         // uint64 ties;
 
-        // TODO: the dice bags should be an ERC721 nft instead of a player only having one
         // TODO: this is too simple. think more about this. probably have "tournament" contracts with blinding and other cool things
+        // TODO: the dice bags should be an ERC721 nft instead of a player only having one
         // TODO: let people use a contract to pick from the dice bag?
-        uint256[NUM_DICE_BAG] favoriteDice;
+        uint256[NUM_DICE_BAG] chosenDice;
     }
 
     mapping(address => PlayerInfo) public players;
 
+    /// TODO: how to do different prices for different vault tokens? once set, we can't change the refundPrice! but the other prices can change
     constructor(
         address _owner,
         address _devFund,
@@ -130,14 +134,14 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         // TODO: what about a "re-roll" face? -1?
         // TODO: how can we store these in an immutable?
         // taking this as calldata would be interesting, but the types get complicated
-        dice[0] = DieColor([uint32(4), 4, 4, 4, 4, 9], "Red", unicode"🟥");
-        dice[1] = DieColor([uint32(3), 3, 3, 3, 8, 8], "Yellow", unicode"⭐️");
-        dice[2] = DieColor([uint32(2), 2, 2, 7, 7, 7], "Blue", unicode"🔷");
-        dice[3] = DieColor([uint32(1), 1, 6, 6, 6, 6], "Magenta", unicode"💜");
-        dice[4] = DieColor([uint32(0), 5, 5, 5, 5, 5], "Olive", unicode"🫒");
+        dice[0] = DieInfo([uint32(4), 4, 4, 4, 4, 9], "Red", unicode"🟥");
+        dice[1] = DieInfo([uint32(3), 3, 3, 3, 8, 8], "Yellow", unicode"⭐️");
+        dice[2] = DieInfo([uint32(2), 2, 2, 7, 7, 7], "Blue", unicode"🔷");
+        dice[3] = DieInfo([uint32(1), 1, 6, 6, 6, 6], "Magenta", unicode"💜");
+        dice[4] = DieInfo([uint32(0), 5, 5, 5, 5, 5], "Olive", unicode"🫒");
     }
 
-    function allDice() public view returns (DieColor[NUM_COLORS] memory) {
+    function allDice() public view returns (DieInfo[NUM_COLORS] memory) {
         return dice;
     }
 
@@ -149,7 +153,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     /// TODO: do we want to somehow blind this until after the dice is buyDiceed? that would require more state
     /// this is here so that the game logic can upgrade but colors won't change
     /// @dev colors should NOT change with the version changing!
-    function color(uint256 diceId) public pure returns (uint256) {
+    function getColor(uint256 diceId) public pure returns (uint256) {
         return diceId % NUM_COLORS;
     }
 
@@ -157,10 +161,11 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         return string(abi.encodePacked(tokenURIPrefix, id));
     }
 
+    // TODO: is this a good name?
     function name(uint256 id) external view returns (string memory) {
-        DieColor memory die = dice[color(id)];
+        DieInfo memory die = dice[getColor(id)];
 
-        return string(abi.encodePacked(die.name, " Alderson Die"));
+        return string(abi.encodePacked(die.name, " Alderson Die ", id));
     }
 
     /// @notice there might be some rounding errors on this as tokens move through the vault
@@ -191,7 +196,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     }
 
     function symbol(uint256 id) public view virtual returns (string memory) {
-        DieColor memory die = dice[color(id)];
+        DieInfo memory die = dice[getColor(id)];
 
         return string(abi.encodePacked("AD", die.symbol));
     }
@@ -211,14 +216,13 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         bag = currentBag(prng, NUM_DICE_BAG);
     }
 
-    /// @notice a random bag currently available for purchase. this changes every block
+    /// @notice a random bag currently available for purchase
     function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public pure returns (uint256[] memory bag) {
         (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomDice(prng, numDice);
 
-        bag = new uint256[](numDice);
-        uint256 bagIndex = 0;
-
         uint256 numIds = diceIds.length;
+        uint256 bagIndex = 0;
+        bag = new uint256[](numDice);
         for (uint256 i = 0; i < numIds; i++) {
             uint256 currentId = diceIds[i];
             for (uint256 j = 0; j < diceAmounts[i]; j++) {
@@ -231,111 +235,73 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         prng.shuffle(bag);
     }
 
-    // TODO: think more about this. 10 dice and 10 rounds is 100 rolls. is that too much?
-    function skirmishColors(LibPRNG.PRNG memory hashPrng, uint256 color0, uint256 color1, uint8 rounds)
-        public
-        returns (uint8 wins0, uint8 wins1, uint8 ties)
-    {
-        DieColor memory dieColor0 = dice[color0 % NUM_COLORS];
-        DieColor memory dieColor1 = dice[color1 % NUM_COLORS];
+    // TODO: this is just to make off-chain calculations easy
+    function scorePips(uint256[] memory pips0, uint256[] memory pips1) public pure returns (uint256 wins0, uint256 wins1, uint256 ties) {
+        uint256 numDice = pips0.length;
 
-        for (uint16 round = 0; round < rounds; round++) {
-            uint256 side0 = randomRoll(hashPrng);
-            uint256 side1 = randomRoll(hashPrng);
+        require(numDice == pips1.length, "!len");
 
-            // // TODO: use console.log?
-            // emit Pips(color0, dieColor0.pips, color1, dieColor1.pips);
+        wins0 = 0;
+        wins1 = 0;
+        ties = 0;
 
-            uint32 roll0 = dieColor0.pips[side0];
-            uint32 roll1 = dieColor1.pips[side1];
+        for (uint256 i = 0; i < numDice; i++) {
+            uint256 pip0 = pips0[i];
+            uint256 pip1 = pips1[i];
 
-            // // TODO: use console.log?
-            emit SkirmishColor(color0, color1, round, side0, side1);
-
-            if (roll0 > roll1) {
+            if (pip0 > pip1) {
                 wins0++;
-            } else if (roll1 > roll0) {
+            } else if (pip1 > pip0) {
                 wins1++;
-            } else {
+            } else if (pip0 == pip1) {
                 ties++;
             }
         }
-
-        // emit ScoreCard(scoreCard);
     }
 
-    function skirmishBags(uint256[] memory diceBag0, uint256[] memory diceBag1, uint8 draws)
-        public
-        returns (uint8 wins0, uint8 wins1, uint8 ties)
-    {
-        LibPRNG.PRNG memory hashPrng = prevrandaoPrng();
+    function rollDice(LibPRNG.PRNG memory prng, uint256[] memory orderedDice) public view returns (uint256[] memory pips) {
+        // TODO: add something about the bag to the prng?
 
-        uint256 bagSize = diceBag0.length;
+        uint256 bagSize = orderedDice.length;
 
-        require(bagSize == diceBag1.length, "Dice bags must be the same length");
-        require(bagSize >= draws, "need more dice for this many draws");
+        pips = new uint256[](bagSize);
 
-        // randomize the dice
-        // TODO: just shuffle one bag? with a good shuffle function, this is equivalent. its not nearly as fun to watch though
-        hashPrng.shuffle(diceBag0);
-        hashPrng.shuffle(diceBag1);
+        for (uint256 i = 0; i < bagSize; i++) {
+            uint256 diceId = orderedDice[i];
+            uint256 faceId = randomRoll(prng);
 
-        emit SkirmishBags(draws, diceBag0, diceBag1);
+            uint256 colorId = getColor(diceId);
 
-        for (uint256 i = 0; i < draws; i++) {
-            uint256 color0 = color(diceBag0[i]);
-            uint256 color1 = color(diceBag1[i]);
+            DieInfo storage dieInfo = dice[colorId];
 
-            (uint8 w0, uint8 w1,) = skirmishColors(hashPrng, color0, color1, NUM_ROLLS);
-
-            if (w0 > w1) {
-                wins0++;
-            } else if (w1 > w0) {
-                wins1++;
-            } else {
-                ties++;
-            }
+            pips[i] = dieInfo.pips[faceId];
         }
-
-        // emit ScoreCard(scoreCard);
     }
 
-    function skirmishPVE(address player) public returns (uint8 wins0, uint8 wins1, uint8 ties) {
-        PlayerInfo memory playerInfo = players[player];
+    function rollCurrentBag() public view returns (uint256[] memory pips) {
+        uint256[] memory bag = currentBag();
 
-        // the PVE bag uses easy-to-predict random
-        uint256[] memory diceBag1 = currentBag();
-        uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);
+        LibPRNG.PRNG memory prng = skirmishPrng(address(this));
 
-        require(diceBag1.length == diceBag0.length, "bad bag size");
+        pips = rollDice(prng, bag);
+    }
 
+    function rollPlayerBag(address player) public view returns (uint256[] memory pips) {
+        // copy the player's chosen dice into memory
+        uint256[] memory bag = new uint256[](NUM_DICE_BAG);
         for (uint256 i = 0; i < NUM_DICE_BAG; i++) {
-            diceBag0[i] = playerInfo.favoriteDice[i];
+            bag[i] = players[player].chosenDice[i];
         }
 
-        // but the dice rolls use harder-to-predict random
-        (wins0, wins1, ties) = skirmishBags(diceBag0, diceBag1, NUM_ROLLS);
-    }
+        LibPRNG.PRNG memory prng = skirmishPrng(player);
 
-    /// @notice compare 2 player's favorite dice
-    function skirmishPlayers(address player0, address player1) public returns (uint8 wins0, uint8 wins1, uint8 ties) {
-        uint256[] memory diceBag0 = new uint256[](NUM_DICE_BAG);
-        uint256[] memory diceBag1 = new uint256[](NUM_DICE_BAG);
-
-        for (uint256 i = 0; i < NUM_DICE_BAG; i++) {
-            diceBag0[i] = players[player0].favoriteDice[i];
-            diceBag1[i] = players[player1].favoriteDice[i];
-        }
-
-        (wins0, wins1, ties) = skirmishBags(diceBag0, diceBag1, NUM_ROLLS);
-
-        emit SkirmishPlayers(player0, player1, wins0, wins1, ties);
+        pips = rollDice(prng, bag);
     }
 
     /// @notice returns the faceId of a given die being rolled
-    /// @dev TODO: think a lot more about this
+    /// @dev TODO: think a lot more about this. include the diceId in here?
     function randomRoll(LibPRNG.PRNG memory prng) public pure returns (uint256 faceId) {
-        faceId = (prng.next()) % NUM_SIDES;
+        faceId = prng.next() % NUM_SIDES;
     }
 
     function randomDice(LibPRNG.PRNG memory prng, uint256 numDice)
@@ -419,7 +385,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     }
 
     // TODO: how should we allow people to set their dice bags? let playerInfo approve another contract to do it. maybe just overload the operator on the NFT?
-    function setDiceBag(address player, uint256[NUM_DICE_BAG] calldata favoriteDice) public {
+    function setDiceBag(address player, uint256[NUM_DICE_BAG] calldata chosenDice) public {
         // TODO: double check the order on isOperator
         require(player == msg.sender || nft.isOperator(player, msg.sender), "!auth");
 
@@ -429,11 +395,11 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         uint256[] memory counter = new uint256[](NUM_DICE_BAG);
 
         for (uint256 i = 0; i < NUM_DICE_BAG; i++) {
-            playerInfo.favoriteDice[i] = favoriteDice[i];
+            playerInfo.chosenDice[i] = chosenDice[i];
 
-            // i'd like to transfer these dice out, but that is a lot more complicated than i'd hoped at first (especially with upgrades)
+            // i'd like to lock these dice, but that is a lot more complicated than i'd hoped at first (especially with upgrades)
             for (uint256 j = 0; j <= i; j++) {
-                if (favoriteDice[i] == favoriteDice[j]) {
+                if (chosenDice[i] == chosenDice[j]) {
                     // if we've seen this dice before, increment the counter for that field
                     counter[i] += 1;
                     break;
@@ -442,14 +408,14 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         }
 
         for (uint256 i = 0; i < NUM_DICE_BAG; i++) {
-            uint256 needed = counter[favoriteDice[i]];
+            uint256 needed = counter[chosenDice[i]];
 
             if (needed > 0) {
-                require(nft.balanceOf(player, favoriteDice[i]) >= needed, "!bal");
+                require(nft.balanceOf(player, chosenDice[i]) >= needed, "!bal");
             }
         }
 
-        emit FavoriteDice(player, playerInfo.favoriteDice);
+        emit FavoriteDice(player, playerInfo.chosenDice);
     }
 
     /// @notice the bag stays the same for 10 blocks
@@ -501,9 +467,6 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     /// I think predictable is fine for most of this game's random. I want players able to plan ahead some.
     function numberPrng(uint256 n) public pure returns (LibPRNG.PRNG memory prng) {
         prng.seed(n);
-
-        // TODO: do we need this? having a seed of a number doesn't feel very good so this at least adds one keccak to it before being used
-        prng.next();
     }
 
     /// @dev TODO: THIS IS PREDICTABLE (but not as easily as block number)! KEEP THINKING ABOUT THIS
@@ -511,6 +474,10 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     /// @dev TODO: include the player addresses? i dont actually think a player controlled seed input is a good idea
     function prevrandaoPrng() public view returns (LibPRNG.PRNG memory prng) {
         prng.seed(uint256(block.prevrandao));
+    }
+
+    function skirmishPrng(address player) public view returns (LibPRNG.PRNG memory prng) {
+        prng.seed(uint256(keccak256(abi.encodePacked(block.prevrandao, player))));
     }
 
     /// @notice deposit tokens without minting any dice. all interest goes to the prize pool and dev fund.

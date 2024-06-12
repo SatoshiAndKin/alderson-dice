@@ -583,6 +583,20 @@ fn App() -> impl IntoView {
 
                                 // we call dispatch because we might start with the wallet already being connected. i don't love this
 
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // TODO: dropdown to change the chain?
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // TODO: dropdown to change the chain?
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
                                 // a button that requests the arbitrum provider and accounts when clicked
                                 // TODO: this should open a modal that lists the user's injected wallets and lets them pick one
                                 // TODO: should also let the user use other wallets like with walletconnect
@@ -623,19 +637,33 @@ fn App() -> impl IntoView {
                     </div>
                 </article>
 
-                <article>"NFT Contract: " {move || { format!("{} - {:?}", nft_contract_address(), nft_contract()) }}</article>
+                <article>
+                    "NFT Contract: "
+                    {move || { format!("{} - {:?}", nft_contract_address(), nft_contract()) }}
+                </article>
 
                 <article>"Total Dice: " {total_dice}</article>
 
                 <Show when=move || game_contract().is_some()>
-                    <article>"Game Contract: " {move || { format!("{:?} - {:?}", game_contract_address().expect("game_contract is set so the address must be too"), game_contract()) }}</article>
+                    <article>
+                        "Game Contract: "
+                        {move || {
+                            format!(
+                                "{:?} - {:?}",
+                                game_contract_address()
+                                    .expect("game_contract is set so the address must be too"),
+                                game_contract(),
+                            )
+                        }}
+
+                    </article>
 
                     // TODO: loading spinner
 
                     <article>"Dice Colors: " {move || format!("{:?}", dice_colors())}</article>
 
-                // TODO: loading spinner
-                // TODO: animation every change
+                    // TODO: loading spinner
+                    // TODO: animation every change
                     <Show
                         when=move || { current_bag().map(|x| x.is_some()).unwrap_or(false) }
                         fallback=|| view! { <article>"Block's dice are loading..."</article> }
