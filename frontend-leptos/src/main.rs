@@ -18,6 +18,9 @@ const ARBITRUM_CHAIN_ID: &str = "0xa4b1";
 // TODO: get this from the build artifacts
 const NFT_ADDRESS: &str = "0xFFA4DB58Ad08525dFeB232858992047ECab26e95";
 
+// TODO: make this a signal
+const EMIT_MISSED: bool = false;
+
 fn main() {
     console_error_panic_hook::set_once();
 
@@ -259,7 +262,7 @@ fn App() -> impl IntoView {
 
     // TODO: eventually emit_missed should be a user option
     // TODO: if another provider is chosen, this subscription should be ended
-    let block_sub = defaultPublicClient.watch_heads(set_latest_block_header, false);
+    let block_sub = defaultPublicClient.watch_heads(set_latest_block_header, EMIT_MISSED);
 
     let block_subscription = Rc::new(Mutex::new((block_sub, defaultPublicClient.inner())));
 
@@ -322,7 +325,8 @@ fn App() -> impl IntoView {
 
                         log!("unsubscribed: {:?}", returned);
 
-                        let sub = defaultPublicClient.watch_heads(set_latest_block_header, false);
+                        let sub =
+                            defaultPublicClient.watch_heads(set_latest_block_header, EMIT_MISSED);
 
                         *lock = (sub, defaultPublicClient.inner());
                     }
@@ -373,7 +377,7 @@ fn App() -> impl IntoView {
 
                     log!("unsubscribed: {:?}", returned);
 
-                    let sub = public.watch_heads(set_latest_block_header, false);
+                    let sub = public.watch_heads(set_latest_block_header, EMIT_MISSED);
 
                     *lock = (sub, public.inner());
                 }
@@ -462,7 +466,7 @@ fn App() -> impl IntoView {
         Some(dice)
     });
 
-    // TODO: this is probably not the right way to pass dice_colors through. but calling it fails
+    // TODO: split current_bag and current_pips into separate resources?
     let current_bag = create_resource(
         move || (game_contract(), latest_block_number(), dice_colors()),
         |(game_contract, latest_block_number, dice_colors)| async move {
@@ -494,7 +498,29 @@ fn App() -> impl IntoView {
                         })
                         .collect::<Vec<_>>();
 
-                    Some(current_bag)
+                    // TODO: one rpc call to get the bag and the roll/await these in parallel
+                    let current_pips = game_contract
+                        .read(
+                            "rollCurrentBag",
+                            &JsValue::undefined(),
+                            &JsValue::undefined(),
+                        )
+                        .await
+                        .expect("failed to get current pips")
+                        .dyn_into::<Array>()
+                        .expect("current pips is not an array")
+                        .into_iter()
+                        .map(|x| {
+                            x.dyn_into::<BigInt>()
+                                .expect("pips are a bigint here")
+                                .to_string(10)
+                                .expect("pips should become a JsString")
+                                .as_string()
+                                .expect("pips should become a String")
+                        })
+                        .collect::<Vec<_>>();
+
+                    Some((current_bag, current_pips))
                 }
                 _ => None,
             }
@@ -569,6 +595,13 @@ fn App() -> impl IntoView {
                                 .into_view()
                         } else {
                             view! {
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+                                // TODO: don't call chain_id twice? use a resource? is that the right term?
+
+                                // TODO: dropdown to change the chain?
+
+                                // we call dispatch because we might start with the wallet already being connected. i don't love this
+
                                 // we call dispatch because we might start with the wallet already being connected. i don't love this
                                 // TODO: don't call chain_id twice? use a resource? is that the right term?
 
@@ -673,15 +706,18 @@ fn App() -> impl IntoView {
                             // TODO: component for the game's current bag according to the current block
 
                             {
-                                let current_bag = current_bag().unwrap().unwrap();
+                                let (current_bag, current_pips) = current_bag().unwrap().unwrap();
                                 current_bag
                                     .into_iter()
-                                    .map(|dice_color| {
+                                    .zip(current_pips.into_iter())
+                                    .map(|(dice_color, pips)| {
                                         view! {
                                             // TODO: is the bag giving us a dice id? if so, then we need to turn that into a color
                                             // TODO: on-hover show the color name and pips
                                             // TODO: show the number rolled on top of each die
                                             {&dice_color.symbol}
+                                            " "
+                                            {pips}
                                             " "
                                         }
                                     })
@@ -713,7 +749,7 @@ fn App() -> impl IntoView {
 
                 // TODO: component for seeing favorite dice
                 // TODO: component for choosing favorite dice
-                <article>"Favorite Dice: " "???"</article>
+                <article>"Your Chosen Dice: " "???"</article>
 
                 <article>
                     // TODO: component for balances

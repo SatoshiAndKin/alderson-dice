@@ -19,7 +19,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     uint256 public constant NUM_SIDES = 6;
     uint8 public constant NUM_DICE_BAG = 10;
 
-    event FavoriteDice(address indexed player, uint256[NUM_DICE_BAG] dice);
+    event ChosenDice(address indexed player, uint256[NUM_DICE_BAG] dice);
 
     event Fees(
         address indexed player,
@@ -385,7 +385,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     }
 
     // TODO: how should we allow people to set their dice bags? let playerInfo approve another contract to do it. maybe just overload the operator on the NFT?
-    function setDiceBag(address player, uint256[NUM_DICE_BAG] calldata chosenDice) public {
+    function chooseDice(address player, uint256[NUM_DICE_BAG] calldata chosenDice) public {
         // TODO: double check the order on isOperator
         require(player == msg.sender || nft.isOperator(player, msg.sender), "!auth");
 
@@ -415,7 +415,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
             }
         }
 
-        emit FavoriteDice(player, playerInfo.chosenDice);
+        emit ChosenDice(player, playerInfo.chosenDice);
     }
 
     /// @notice the bag stays the same for 10 blocks
@@ -477,7 +477,8 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
     }
 
     function skirmishPrng(address player) public view returns (LibPRNG.PRNG memory prng) {
-        prng.seed(uint256(keccak256(abi.encodePacked(block.prevrandao, player))));
+        // TODO: i didn't think i'd need block.number here, but prevrandao wasn't changing like i expected. maybe on arbitrum it changes less often?
+        prng.seed(uint256(keccak256(abi.encodePacked(block.prevrandao, block.number, player))));
     }
 
     /// @notice deposit tokens without minting any dice. all interest goes to the prize pool and dev fund.
