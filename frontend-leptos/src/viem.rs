@@ -79,6 +79,10 @@ impl ViemPublicClient {
             .expect("setting emitMissed");
         Reflect::set(&arguments, &"emitOnBegin".into(), &true.into()).expect("setting emitOnBegin");
 
+        // TODO: different polling interval depending on the chain blocktime
+        Reflect::set(&arguments, &"pollingInterval".into(), &500.into())
+            .expect("setting pollingInterval");
+
         let watch_blocks_fn = Reflect::get(&self.inner, &"watchBlocks".into())
             .expect("getting watchBlocks")
             .dyn_into::<Function>()
