@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {ERC4626} from "@solady/tokens/ERC4626.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
-import {IGameLogic, AldersonDiceNFT, ERC20} from "./AldersonDiceNFT.sol";
+import {IGameLogic, IntransitiveDiceNFT, ERC20} from "./IntransitiveDiceNFT.sol";
 import {LibPRNG} from "@solady/utils/LibPRNG.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "@solady/utils/FixedPointMathLib.sol";
@@ -40,7 +40,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
 
     event Sponsored(address indexed sender, address indexed account, uint256 amount, uint256 balance, uint256 total);
 
-    AldersonDiceNFT public immutable nft;
+    IntransitiveDiceNFT public immutable nft;
 
     /// @notice the source of prizes for this game
     ERC4626 public immutable vaultToken;
@@ -105,7 +105,7 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         address _owner,
         address _devFund,
         address _prizeFund,
-        AldersonDiceNFT _nft,
+        IntransitiveDiceNFT _nft,
         ERC4626 _vaultToken,
         uint256 _refundPrice,
         uint256 _mintDevFee,

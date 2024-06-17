@@ -32,7 +32,7 @@ contract DeployV0Script is Script {
         // 0.50 tokens to the prizeFund
         uint256 mintPrizeFee = mintDevFee;
 
-        AldersonDiceNFT nft = new AldersonDiceNFT{salt: saltNft}(owner);
+        IntransitiveDiceNFT nft = new IntransitiveDiceNFT{salt: saltNft}(owner);
 
         console.log("nft:", address(nft));
 

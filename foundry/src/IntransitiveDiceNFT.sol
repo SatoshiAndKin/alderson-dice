@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
+// TODO: rewrite this to take the GameTokens as a way to purchase
+// TODO: this needs to be an immutable contract. having the burn be part of the upgrade path is dangerous. at worst, only a week's prize money should be ruggable
 pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {ERC6909} from "@solady/tokens/ERC6909.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
-import {LibBitmap} from "@solady/utils/LibBitmap.sol";
 import {LibPRNG} from "@solady/utils/LibPRNG.sol";
-
-// TODO: we need to write an
 
 interface IGameLogic {
     function tokenURI(uint256 id) external view returns (string memory);
@@ -15,7 +14,7 @@ interface IGameLogic {
     function symbol(uint256 id) external view returns (string memory);
 }
 
-contract AldersonDiceNFT is ERC6909 {
+contract IntransitiveDiceNFT is ERC6909 {
     using LibPRNG for LibPRNG.PRNG;
 
     event Upgrade(
