@@ -2,4 +2,4 @@ AldersonDiceGameV0Test:testFuzz_prankedNftMint(address,uint256) (runs: 257, μ: 
 AldersonDiceGameV0Test:test_buySomeDice() (gas: 403595)
 AldersonDiceGameV0Test:test_rollDice() (gas: 95480)
 AldersonDiceGameV0Test:test_vaultDepositAndWithdraw() (gas: 201218)
-GameTokenTest:testSimpleDepositAndWithdraw() (gas: 228923)
+GameTokenTest:testSimpleDepositAndWithdraw() (gas: 230551)

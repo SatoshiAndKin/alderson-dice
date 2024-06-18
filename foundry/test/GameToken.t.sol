@@ -59,13 +59,16 @@ contract GameTokenTest is Test {
 
         console.log("numTokens:", numTokens);
 
-        require(gameToken.balanceOf(alice) == numTokens, "bad balance");
+        require(gameToken.balanceOf(alice) == numTokens, "bad balance post mint");
 
-        require(gameToken.totalSupply() == numTokens, "bad total supply");
+        require(gameToken.totalSupply() == numTokens, "bad total supply post mint");
 
         uint256 sharesBurned = gameToken.withdrawAsset(numTokens);
 
         console.log("shares burned:", sharesBurned);
+
+        require(gameToken.balanceOf(alice) == 0, "bad balance post burn");
+        require(gameToken.totalSupply() == 0, "bad total supply post burn");
 
         // TODO: what else should we test?
     }
