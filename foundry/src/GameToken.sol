@@ -14,14 +14,14 @@ contract GameTokenMachine {
     event GameTokenCreated(address indexed token, address indexed vault, address indexed earnings);
 
     // TODO: should earnings be a list? maybe with a list for shares too? that seems like a common need
-    function createGameToken(ERC4626 vault, address earnings) public returns (address) {
+    function createGameToken(ERC4626 vault, address earnings) public returns (GameToken) {
         // TODO: use LibClone for this to save gas. the token uses immutables though so we need to figure out clones with immutables
         // TODO: i don't think we want to allow a customizeable salt
         GameToken token = new GameToken{salt: bytes32(0)}(vault, earnings);
 
         emit GameTokenCreated(address(token), address(vault), earnings);
 
-        return address(token);
+        return token;
     }
 }
 
@@ -34,7 +34,8 @@ contract GameToken is ERC20 {
     ERC20 immutable public asset;
     uint8 immutable internal assetDecimals;
 
-    uint256 public totalTokenValue;
+    uint256 public totalForwardedShares;
+    uint256 public totalForwardedValue;
 
     address immutable public earningsAddress;
 
@@ -63,94 +64,144 @@ contract GameToken is ERC20 {
         return string(abi.encodePacked("g", asset.symbol()));
     }
 
-    function depositAsset(uint256 amount, address to) public returns (uint256 shares) {
+    function depositAsset(uint256 amount) public returns (uint256 shares) {
+        return depositAsset(amount, msg.sender);
+    }
+
+    function depositAsset(uint256 amount, address to) public returns (uint256 redeemableAmount) {
         address(asset).safeTransferFrom(msg.sender, address(this), amount);
 
+        // exact approval every time is safer than infinite approval at start
+        address(asset).safeApproveWithRetry(address(vault), amount);
+
         // deposit takes the amount of assets
-        shares = vault.deposit(amount, to);
+        // the shares are minted to this contract. the `to` gets the GameToken ERC20 instead
+        uint256 shares = vault.deposit(amount, address(this));
 
         // update amount to cover any rounding errors
         // redeem takes the amount of shares
-        amount = vault.previewRedeem(shares);
+        redeemableAmount = vault.previewRedeem(shares);
 
         // TODO: optional fees here?
 
-        totalTokenValue += amount;
-
-        _mint(to, amount);
+        _mint(to, redeemableAmount);
     }
 
-    function depositVault(uint256 shares, address to) public returns (uint256 amount) {
+    function depositVault(uint256 shares) public returns (uint256 redeemableAmount) {
+        return depositVault(shares, msg.sender);
+    }
+
+    function depositVault(uint256 shares, address to) public returns (uint256 redeemableAmount) {
         vault.transferFrom(msg.sender, address(this), shares);
 
         // redeem takes the amount of shares
-        amount = vault.previewRedeem(shares);
+        redeemableAmount = vault.previewRedeem(shares);
 
         // TODO: optional fees here?
         // casinos don't take fees on buying chips with cash, but what we are building is a bit different. still maybe better to only take money off interest
 
-        totalTokenValue += amount;
+        _mint(to, redeemableAmount);
+    }
 
-        _mint(to, amount);
+    function withdrawAsset(uint256 amount) public returns (uint256 shares) {
+        return withdrawAsset(amount, msg.sender, msg.sender);
     }
 
     // redeems game tokens for the vault token
     // TODO: do we want vault token or asset token? need functions for both
-    function withdrawAsset(uint256 tokenAmount, address to, address owner) public returns (uint256 shares) {
-        if (owner != msg.sender) {
-            _spendAllowance(owner, msg.sender, tokenAmount);
-        }
-        _burn(owner, tokenAmount);
-
-        // TODO: this feels wrong
-        // withdraw takes the amount of assets and returns the number of shares burned
-        shares = vault.withdraw(tokenAmount, to, owner);
-
-        // TODO: calculate from the shares instead of re-using the amount?
-        totalTokenValue -= tokenAmount;
-
-        address(asset).safeTransfer(to, tokenAmount);
-    }
-
-    // this method is necessary if the vault has limited withdrawal capacity
-    function withdrawVault(uint256 amount, address to, address owner) public returns (uint256 shares) {
+    function withdrawAsset(uint256 amount, address to, address owner) public returns (uint256 shares) {
         if (owner != msg.sender) {
             _spendAllowance(owner, msg.sender, amount);
         }
         _burn(owner, amount);
 
-        // calculate the amount of shares required for the withdrawal
-        shares = vault.previewWithdraw(amount);
+        // withdraw takes the amount of assets and returns the number of shares burned
+        // TODO: is this the right addresses?
+        shares = vault.withdraw(amount, address(this), address(this));
 
-        // TODO: calculate from the shares instead of re-using the amount?
-        totalTokenValue -= amount;
+        // TODO: withdraw directly to `to`?
+        address(asset).safeTransfer(to, amount);
+    }
+
+    function withdrawAssetAsVault(uint256 amount) public returns (uint256 shares) {
+        return withdrawAssetAsVault(amount, msg.sender, msg.sender);
+    }
+
+    /// @notice this method is necessary if the vault has limited withdrawal capacity
+    function withdrawAssetAsVault(uint256 amount, address to, address owner) public returns (uint256 shares) {
+        if (owner != msg.sender) {
+            _spendAllowance(owner, msg.sender, amount);
+        }
+        _burn(owner, amount);
+
+        // calculate the amount of shares required for the withdrawal. don't actually withdraw them
+        shares = vault.previewWithdraw(amount);
 
         // transfer the vault tokens rather than withdrawing
         vault.transfer(to, shares);
     }
 
-    function excessShares() public view returns (uint256 amount) {
+    function withdrawVault(uint256 shares) public returns (uint256 amount) {
+        return withdrawVault(shares, msg.sender, msg.sender);
+    }
+
+    function withdrawVault(uint256 shares, address to, address owner) public returns (uint256 amount) {
+        // redeem takes the amount of shares
+        amount = vault.previewRedeem(shares);
+
+        if (owner != msg.sender) {
+            _spendAllowance(owner, msg.sender, amount);
+        }
+
+        _burn(owner, amount);
+
+        // transfer the vault tokens rather than withdrawing
+        vault.transfer(to, shares);
+    }
+
+    function excessShares() public view returns (uint256 shares) {
         uint256 vaultBalance = vault.balanceOf(address(this));
 
+        if (vaultBalance == 0) {
+            return shares;
+        }
+
+        uint256 totalTokenValue = totalSupply();
+
+        if (totalTokenValue == 0) {
+            return shares;
+        }
+
+        // withdraw takes the amount of assets and returns the number of shares burned
         uint256 sharesNeeded = vault.previewWithdraw(totalTokenValue);
 
         if (sharesNeeded <= vaultBalance) {
-            return 0;
+            return shares;
         }
 
-        amount = sharesNeeded - vaultBalance;
+        shares = sharesNeeded - vaultBalance;
     }
 
-    function excessAssets() public view returns (uint256 amount) {
-        amount = vault.previewRedeem(excessShares());
-    }
-
-    function forwardExcess() public returns (uint256 shares) {
+    function excess() public view returns (uint256 shares, uint256 amount) {
         shares = excessShares();
 
-        if (shares > 0) {
-            // TODO: optionally do multiple transfers here based on some share math
-            vault.transfer(earningsAddress, shares);
+        amount = vault.previewRedeem(shares);
+    }
+
+    function forwardEarnings() public returns (uint256 shares, uint256 amount) {
+        (shares, amount) = excess();
+
+        if (shares == 0 || amount == 0) {
+            return (0, 0);
         }
+
+        totalForwardedShares += shares;
+        totalForwardedValue += amount;
+
+        // TODO: optionally do multiple transfers here based on some share math
+        // TODO: don't just transfer. call a deposit method? this should make it more secure against inflation attacks
+        vault.transfer(earningsAddress, shares);
+
+        // TODO: emit an event
     }
 }
