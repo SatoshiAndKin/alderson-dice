@@ -4,3 +4,6 @@
 [submodule "lib/solady"]
 	path = lib/solady
 	url = https://github.com/vectorized/solady
+[submodule "foundry/lib/pooltogether-v5-twab-controller"]
+	path = foundry/lib/pooltogether-v5-twab-controller
+	url = https://github.com/pooltogether/v5-twab-controller
