@@ -50,7 +50,8 @@ contract DeployV0Script is Script {
 
         console.log("game:", address(game));
 
-        nft.upgrade(address(game), false);
+        revert("upgrades are a wip");
+        // nft.upgrade(address(game), false);
 
         vm.stopBroadcast();
     }

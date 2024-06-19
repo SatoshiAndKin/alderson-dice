@@ -84,6 +84,8 @@ contract GameToken is ERC20 {
 
         // TODO: optional fees here?
 
+        // TODO: Time-weighted average balance controller from pooltogether
+
         _mint(to, redeemableAmount);
     }
 
@@ -100,6 +102,8 @@ contract GameToken is ERC20 {
         // TODO: optional fees here?
         // casinos don't take fees on buying chips with cash, but what we are building is a bit different. still maybe better to only take money off interest
 
+        // TODO: Time-weighted average balance controller from pooltogether
+
         _mint(to, redeemableAmount);
     }
 
@@ -114,6 +118,8 @@ contract GameToken is ERC20 {
             _spendAllowance(owner, msg.sender, amount);
         }
         _burn(owner, amount);
+
+        // TODO: Time-weighted average balance controller from pooltogether
 
         // withdraw takes the amount of assets and returns the number of shares burned
         // TODO: is this the right addresses?
@@ -133,6 +139,8 @@ contract GameToken is ERC20 {
             _spendAllowance(owner, msg.sender, amount);
         }
         _burn(owner, amount);
+
+        // TODO: Time-weighted average balance controller from pooltogether
 
         // calculate the amount of shares required for the withdrawal. don't actually withdraw them
         shares = vault.previewWithdraw(amount);
@@ -154,6 +162,8 @@ contract GameToken is ERC20 {
         }
 
         _burn(owner, amount);
+
+        // TODO: Time-weighted average balance controller from pooltogether
 
         // transfer the vault tokens rather than withdrawing
         vault.transfer(to, shares);
@@ -195,6 +205,8 @@ contract GameToken is ERC20 {
             return (0, 0);
         }
 
+        // TODO: something similar to time-weighted average balancce controller from pooltogether
+        // TODO: calculate the balance for the epoch. then we can combine the main TWABC balance with the value earned for the week
         totalForwardedShares += shares;
         totalForwardedValue += amount;
 

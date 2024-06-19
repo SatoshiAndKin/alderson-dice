@@ -201,10 +201,6 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         return string(abi.encodePacked("AD", die.symbol));
     }
 
-    function upgrade(address _newGameLogic) public onlyOwner {
-        nft.upgrade(_newGameLogic, true);
-    }
-
     function setTokenURIPrefix(string memory _tokenURIPrefix) public onlyOwner {
         tokenURIPrefix = _tokenURIPrefix;
     }
@@ -381,7 +377,8 @@ contract AldersonDiceGameV0 is IGameLogic, Ownable {
         // TODO: make this public so that a frame can easily show the current dice bag that is for sale
         (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomDice(prng, numDice);
 
-        nft.mint(receiver, diceIds, diceAmounts);
+        // nft.mint(receiver, diceIds, diceAmounts);
+        revert("minting is being refactored");
     }
 
     // TODO: how should we allow people to set their dice bags? let playerInfo approve another contract to do it. maybe just overload the operator on the NFT?

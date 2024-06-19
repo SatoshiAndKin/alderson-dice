@@ -58,7 +58,8 @@ contract AldersonDiceGameV0Test is Test {
             "ipfs://alderson-dice.eth/dice/"
         );
 
-        nft.upgrade(address(game), false);
+        revert("upgrades are a wip");
+        // nft.upgrade(address(game), false);
     }
 
     function test_buySomeDice() public {

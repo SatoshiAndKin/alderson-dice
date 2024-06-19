@@ -23,25 +23,12 @@ contract IntransitiveDiceNFT is ERC6909 {
 
     IGameLogic public gameLogic;
 
-    /// keep track of old game logic so that they can keep the ability to burn. otherwise tokens could be stuck!
-    mapping(address => bool) public allowedBurners;
-
-    // TODO: these increase the gas cost noticeably
+    // TODO: these increase the gas cost noticeably, but i think we want this available on-chain
     uint256 public totalSupply;
     mapping(uint256 => uint256) public tokenSupply;
 
     constructor(address _gameLogic) {
         gameLogic = IGameLogic(_gameLogic);
-    }
-
-    modifier onlyGameLogic() {
-        require(msg.sender == address(gameLogic), "!auth");
-        _;
-    }
-
-    modifier onlyBurners() {
-        require(msg.sender == address(gameLogic) || allowedBurners[msg.sender], "!auth");
-        _;
     }
 
     function name(uint256 id) public view override returns (string memory) {
@@ -56,40 +43,26 @@ contract IntransitiveDiceNFT is ERC6909 {
         return gameLogic.tokenURI(id);
     }
 
-    function _beforeTokenTransfer(address, /*from*/ address, /*to*/ uint256, /*id*/ uint256 /*amount*/ )
-        internal
-        view
-        override
-    {
-        // i don't think we need any checks here. we could maybe call into the game logic, but that adds a lot of gas
-    }
+    // function _beforeTokenTransfer(address, /*from*/ address, /*to*/ uint256, /*id*/ uint256 /*amount*/ )
+    //     internal
+    //     view
+    //     override
+    // {
+    //     // i don't think we need any checks here. we could maybe call into the game logic, but that adds a lot of gas
+    // }
 
-    function _afterTokenTransfer(address, /*from*/ address, /*to*/ uint256, /*id*/ uint256 /*amount*/ )
-        internal
-        pure
-        override
-    {
-        // i don't think we need any checks here. we could maybe call into the game logic, but that adds a lot of gas
-    }
+    // function _afterTokenTransfer(address, /*from*/ address, /*to*/ uint256, /*id*/ uint256 /*amount*/ )
+    //     internal
+    //     pure
+    //     override
+    // {
+    //     // i don't think we need any checks here. we could maybe call into the game logic, but that adds a lot of gas
+    // }
 
-    // TODO: two-phase commit
-    function upgrade(address _newGameLogic, bool allowOldBurn) external onlyGameLogic {
-        address oldGameLogic = address(gameLogic);
-
-        // keep track of the old game logic so that it can still burn tokens
-        // TODO: allow old game logic to remove itself once it is empty?
-        if (allowOldBurn) {
-            allowedBurners[oldGameLogic] = true;
-        }
-
-        gameLogic = IGameLogic(_newGameLogic);
-
-        emit Upgrade(msg.sender, oldGameLogic, _newGameLogic, allowOldBurn);
-    }
-
+    // TODO: refactor this. upgradability is bad yo.
     function mint(address receiver, uint256[] calldata tokenIds, uint256[] calldata amounts)
         external
-        onlyGameLogic
+        // onlyGameLogic
         returns (uint256 minted)
     {
         uint256 length = tokenIds.length;
@@ -99,14 +72,13 @@ contract IntransitiveDiceNFT is ERC6909 {
         uint256 id;
         uint256 amount;
         for (uint256 i = 0; i < length; i++) {
-            id = tokenIds[i];
             amount = amounts[i];
-
-            require(id > 0, "zero");
-
             if (amount == 0) {
                 continue;
             }
+
+            id = tokenIds[i];
+            require(id > 0, "zero");
 
             _mint(receiver, id, amount);
 
@@ -120,7 +92,7 @@ contract IntransitiveDiceNFT is ERC6909 {
     /// @dev this seems dangerous. be careful to not lock up any underlying assets!
     function burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts)
         external
-        onlyBurners
+        // onlyBurners
         returns (uint256 burned)
     {
         uint256 length = tokenIds.length;
