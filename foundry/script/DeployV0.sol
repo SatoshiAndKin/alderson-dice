@@ -2,7 +2,7 @@
 pragma solidity 0.8.26;
 
 import "forge-std/Script.sol";
-import "../src/AldersonDiceGameV0.sol";
+import "../src/GrimeDiceV0.sol";
 import {YearnVaultV3} from "../src/YearnVaultV3.sol";
 
 contract DeployV0Script is Script {
@@ -32,27 +32,29 @@ contract DeployV0Script is Script {
         // 0.50 tokens to the prizeFund
         uint256 mintPrizeFee = mintDevFee;
 
-        IntransitiveDiceNFT nft = new IntransitiveDiceNFT{salt: saltNft}(owner);
+        revert("finish refactoring this");
 
-        console.log("nft:", address(nft));
+        // IntransitiveDiceNFT nft = new IntransitiveDiceNFT{salt: saltNft}(owner);
 
-        AldersonDiceGameV0 game = new AldersonDiceGameV0{salt: saltGame}(
-            owner,
-            devFund,
-            prizeFund,
-            nft,
-            prizeVault,
-            price,
-            mintDevFee,
-            mintPrizeFee,
-            "ipfs://alderson-dice.eth/dice/"
-        );
+        // console.log("nft:", address(nft));
 
-        console.log("game:", address(game));
+        // AldersonDiceGameV0 game = new AldersonDiceGameV0{salt: saltGame}(
+        //     owner,
+        //     devFund,
+        //     prizeFund,
+        //     nft,
+        //     prizeVault,
+        //     price,
+        //     mintDevFee,
+        //     mintPrizeFee,
+        //     "ipfs://alderson-dice.eth/dice/"
+        // );
 
-        revert("upgrades are a wip");
-        // nft.upgrade(address(game), false);
+        // console.log("game:", address(game));
 
-        vm.stopBroadcast();
+        // revert("upgrades are a wip");
+        // // nft.upgrade(address(game), false);
+
+        // vm.stopBroadcast();
     }
 }

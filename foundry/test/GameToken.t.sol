@@ -2,7 +2,8 @@
 pragma solidity 0.8.26;
 
 import {Test, console} from "@forge-std/Test.sol";
-import {GameToken, GameTokenMachine, ERC20, ERC4626} from "../src/GameToken.sol";
+import {GameTokenMachine} from "../src/GameTokenMachine.sol";
+import {GameToken, ERC20, ERC4626} from "../src/GameToken.sol";
 import {YearnVaultV3, YearnVaultV3Strategy} from "../src/YearnVaultV3.sol";
 import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 

@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
+import {ERC20} from "@solady/tokens/ERC20.sol";
 import {Test, console} from "@forge-std/Test.sol";
-import {IntransitiveDiceNFT, AldersonDiceGameV0, ERC20, ERC4626, LibPRNG} from "../src/AldersonDiceGameV0.sol";
+import {GameToken, GrimeDiceV0, ERC4626, LibPRNG} from "../src/GrimeDiceV0.sol";
 import {YearnVaultV3, YearnVaultV3Strategy} from "../src/YearnVaultV3.sol";
 
-contract AldersonDiceGameV0Test is Test {
+contract GrimeDiceV0Test is Test {
     using LibPRNG for LibPRNG.PRNG;
 
-    IntransitiveDiceNFT public nft;
-    AldersonDiceGameV0 public game;
+    GameToken public gameToken;
+    GrimeDiceV0 public diceToken;
 
     address owner;
     address devFund;
@@ -42,11 +43,11 @@ contract AldersonDiceGameV0Test is Test {
         // give enough tokens to buy 100 dice
         deal(address(prizeToken), address(this), 1_000 * price);
 
-        nft = new IntransitiveDiceNFT(owner);
+        // TODO: deploy game token machine and game token
 
         // changing price while we run breaks redeeming dice. but it makes tests a bit of a pain. i guess make a helper function for this?
         // how should we allow changing the tokenURI?
-        game = new AldersonDiceGameV0(
+        game = new GrimeDiceV0(
             owner,
             devFund,
             prizeFund,
@@ -287,10 +288,12 @@ contract AldersonDiceGameV0Test is Test {
         mintAmounts[0] = amount;
 
         vm.prank(address(game));
-        nft.mint(to, mintIds, mintAmounts);
+        // nft.mint(to, mintIds, mintAmounts);
 
-        require(nft.balanceOf(to, 0) == 0, "zero balance isn't empty");
-        require(nft.balanceOf(to, id) == amount, "unexpected balance");
-        require(nft.balanceOf(to, id + 1) == 0, "other balance isn't empty");
+        // require(nft.balanceOf(to, 0) == 0, "zero balance isn't empty");
+        // require(nft.balanceOf(to, id) == amount, "unexpected balance");
+        // require(nft.balanceOf(to, id + 1) == 0, "other balance isn't empty");
+
+        revert("finish refactoring this");
     }
 }

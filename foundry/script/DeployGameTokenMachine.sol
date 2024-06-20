@@ -2,7 +2,9 @@
 pragma solidity 0.8.26;
 
 import "@forge-std/Script.sol";
+import "../src/GameTokenMachine.sol";
 import "../src/GameToken.sol";
+import "../src/YearnVaultV3.sol";
 
 contract DeployGameTokenMachine is Script {
     function run() external {
@@ -11,14 +13,13 @@ contract DeployGameTokenMachine is Script {
 
         bytes32 saltGameTokenMachine = vm.envBytes32("SALT_GAME_TOKEN_MACHINE");
 
-        uint32 periodLength = 1 weeks;
-        // TODO: what should this be?
-        uint32 periodOffset = 0;
+        TwabController twabController = TwabController(vm.envAddress("TWAB_CONTROLLER_ADDRESS"));
 
-        // TODO: can we just re-use the existing twab controller? maybe if ones set in the env, use it. otherwise, deploy.
-        TwabController twabController = new TwabController(periodLength, periodOffset);
+        GameTokenMachine machine = new GameTokenMachine{salt: saltGameTokenMachine}(twabController);
 
-        new GameTokenMachine{salt: saltGameTokenMachine}(twabController);
+        YearnVaultV3 prizeVault = YearnVaultV3(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
+
+        machine.createGameToken(prizeVault);
 
         vm.stopBroadcast();
     }
