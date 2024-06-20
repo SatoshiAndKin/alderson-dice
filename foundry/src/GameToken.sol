@@ -7,18 +7,25 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {ERC4626} from "@solady/tokens/ERC4626.sol";
+import {SafeCastLib} from "@solady/utils/SafeCastLib.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
-import {TwabController} from "@pooltogether-v5-twab-controller/TWABController.sol";
+import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 
 /// @notice transform any ERC4626 vault tokens into game tokens
 contract GameTokenMachine {
     event GameTokenCreated(address indexed token, address indexed vault, address indexed earnings);
 
+    TwabController public immutable twabController;
+
+    constructor(TwabController _twabController) {
+        twabController = _twabController;
+    }
+
     // TODO: should earnings be a list? maybe with a list for shares too? that seems like a common need
     function createGameToken(ERC4626 vault, address earnings) public returns (GameToken) {
         // TODO: use LibClone for this to save gas. the token uses immutables though so we need to figure out clones with immutables
         // TODO: i don't think we want to allow a customizeable salt
-        GameToken token = new GameToken{salt: bytes32(0)}(vault, earnings);
+        GameToken token = new GameToken{salt: bytes32(0)}(twabController, vault, earnings);
 
         emit GameTokenCreated(address(token), address(vault), earnings);
 
@@ -28,6 +35,8 @@ contract GameTokenMachine {
 
 contract GameToken is ERC20 {
     using SafeTransferLib for address;
+
+    TwabController immutable public twabController;
 
     ERC4626 immutable public vault;
     uint8 immutable internal vaultDecimals;
@@ -40,7 +49,9 @@ contract GameToken is ERC20 {
 
     address immutable public earningsAddress;
 
-    constructor(ERC4626 _vault, address _earningsAddress) {
+    constructor(TwabController _twabController, ERC4626 _vault, address _earningsAddress) {
+        twabController = _twabController;
+
         vault = _vault;
 
         vaultDecimals = vault.decimals();
@@ -94,6 +105,15 @@ contract GameToken is ERC20 {
         return depositVault(shares, msg.sender);
     }
 
+    /// @dev Hook that is called after any transfer of tokens.
+    /// This includes minting and burning.
+    function _afterTokenTransfer(address from, address to, uint256 amount) internal override {
+        uint96 amount96 = SafeCastLib.toUint96(amount);
+
+        // TODO: Time-weighted average balance controller from pooltogether takes a uint96, not a uint256
+        twabController.transfer(from, to, amount96);
+    }
+
     function depositVault(uint256 shares, address to) public returns (uint256 redeemableAmount) {
         vault.transferFrom(msg.sender, address(this), shares);
 
@@ -103,7 +123,6 @@ contract GameToken is ERC20 {
         // TODO: optional fees here?
         // casinos don't take fees on buying chips with cash, but what we are building is a bit different. still maybe better to only take money off interest
 
-        // TODO: Time-weighted average balance controller from pooltogether
 
         _mint(to, redeemableAmount);
     }

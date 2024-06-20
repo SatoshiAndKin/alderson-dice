@@ -17,10 +17,6 @@ interface IGameLogic {
 contract IntransitiveDiceNFT is ERC6909 {
     using LibPRNG for LibPRNG.PRNG;
 
-    event Upgrade(
-        address indexed sender, address indexed oldGameLogic, address indexed newGameLogic, bool allowOldBurn
-    );
-
     IGameLogic public gameLogic;
 
     // TODO: these increase the gas cost noticeably, but i think we want this available on-chain

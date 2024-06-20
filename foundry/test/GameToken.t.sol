@@ -4,12 +4,14 @@ pragma solidity 0.8.26;
 import {Test, console} from "@forge-std/Test.sol";
 import {GameToken, GameTokenMachine, ERC20, ERC4626} from "../src/GameToken.sol";
 import {YearnVaultV3, YearnVaultV3Strategy} from "../src/YearnVaultV3.sol";
+import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 
 // TODO: make sure one user depositing doesn't reduce the value of another user's tokens
 // TODO: check against the various inflation attacks
 contract GameTokenTest is Test {
-    GameTokenMachine public gameTokenMachine;
-    GameToken public gameToken;
+    TwabController twabController;
+    GameTokenMachine gameTokenMachine;
+    GameToken gameToken;
 
     address alice;
     address earnings;
@@ -37,7 +39,13 @@ contract GameTokenTest is Test {
 
         console.log("vaultAsset:", address(vaultAsset));
 
-        gameTokenMachine = new GameTokenMachine();
+        uint32 periodLength = 1 weeks;
+        uint32 periodOffset = uint32(block.timestamp / periodLength);
+
+        // TODO: one already exists for pooltogether, doesn't it? use that if the period length matches what we want
+        TwabController twabController = new TwabController(periodLength, periodOffset);
+
+        gameTokenMachine = new GameTokenMachine(twabController);
 
         gameToken = gameTokenMachine.createGameToken(vault, earnings);
 
