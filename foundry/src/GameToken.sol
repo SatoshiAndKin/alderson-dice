@@ -22,6 +22,7 @@ contract GameTokenMachine {
     }
 
     // TODO: should earnings be a list? maybe with a list for shares too? that seems like a common need
+    // while we could let them choose a twab controller, this seems safer
     function createGameToken(ERC4626 vault, address earnings) public returns (GameToken) {
         // TODO: use LibClone for this to save gas. the token uses immutables though so we need to figure out clones with immutables
         // TODO: i don't think we want to allow a customizeable salt
@@ -36,10 +37,10 @@ contract GameTokenMachine {
 contract GameToken is ERC20 {
     using SafeTransferLib for address;
 
+    // TODO: this tracks the balances, but ERC20 also tracks the balance. we should probably improve that
     TwabController immutable public twabController;
 
     ERC4626 immutable public vault;
-    uint8 immutable internal vaultDecimals;
 
     ERC20 immutable public asset;
     uint8 immutable internal assetDecimals;
@@ -49,12 +50,16 @@ contract GameToken is ERC20 {
 
     address immutable public earningsAddress;
 
+    struct ForwardedEarnings {
+        uint256 shares;
+        uint256 amount;
+    }
+    mapping(uint32 => ForwardedEarnings) public forwardedEarningsByPeriod;
+
     constructor(TwabController _twabController, ERC4626 _vault, address _earningsAddress) {
         twabController = _twabController;
 
         vault = _vault;
-
-        vaultDecimals = vault.decimals();
 
         asset = ERC20(vault.asset());
         assetDecimals = asset.decimals();
@@ -62,24 +67,36 @@ contract GameToken is ERC20 {
         earningsAddress = _earningsAddress;
     }
 
+    /// @dev Hook that is called after any transfer of tokens.
+    /// This includes minting and burning.
+    /// TODO: Time-weighted average balance controller from pooltogether takes a uint96, not a uint256. this might cause problems
+    function _afterTokenTransfer(address from, address to, uint256 amount) internal override {
+        twabController.transfer(from, to, SafeCastLib.toUint96(amount));
+    }
+
+    /// @dev we don't control the vault and so name might change
     function _constantNameHash() internal view override returns (bytes32 result) {
         return keccak256(bytes(name()));
     }
 
+    /// @dev we don't control the vault and so name might change
     function name() public view override returns (string memory) {
         // we could cache these, but these methods are mostly used off-chain and so this is fine
         return string(abi.encodePacked("Gamified ", asset.name()));
     }
 
+    /// @dev we don't control the vault and so symbol might change
     function symbol() public view override returns (string memory) {
         // we could cache this locally, but these methods are mostly used off-chain and so this is fine
         return string(abi.encodePacked("g", asset.symbol()));
     }
 
+    /// @notice the primary entrypoint for users to deposit their own assets
     function depositAsset(uint256 amount) public returns (uint256 shares) {
         return depositAsset(amount, msg.sender);
     }
 
+    /// @notice deposit the sender's assets and give the game tokens `to` someone else
     function depositAsset(uint256 amount, address to) public returns (uint256 redeemableAmount) {
         address(asset).safeTransferFrom(msg.sender, address(this), amount);
 
@@ -96,24 +113,15 @@ contract GameToken is ERC20 {
 
         // TODO: optional fees here?
 
-        // TODO: Time-weighted average balance controller from pooltogether
-
         _mint(to, redeemableAmount);
     }
 
+    // the primary function for users to deposit their already vaulted tokens
     function depositVault(uint256 shares) public returns (uint256 redeemableAmount) {
         return depositVault(shares, msg.sender);
     }
 
-    /// @dev Hook that is called after any transfer of tokens.
-    /// This includes minting and burning.
-    function _afterTokenTransfer(address from, address to, uint256 amount) internal override {
-        uint96 amount96 = SafeCastLib.toUint96(amount);
-
-        // TODO: Time-weighted average balance controller from pooltogether takes a uint96, not a uint256
-        twabController.transfer(from, to, amount96);
-    }
-
+    /// @notice take the sender's vault tokens and give the game tokens `to` someone else
     function depositVault(uint256 shares, address to) public returns (uint256 redeemableAmount) {
         vault.transferFrom(msg.sender, address(this), shares);
 
@@ -123,23 +131,26 @@ contract GameToken is ERC20 {
         // TODO: optional fees here?
         // casinos don't take fees on buying chips with cash, but what we are building is a bit different. still maybe better to only take money off interest
 
-
         _mint(to, redeemableAmount);
     }
 
+    // TODO: how do you undo a sponsorship?
+    function sponsor() public {
+        twabController.sponsor(msg.sender);
+    }
+
+    /// @notice the primary function for users to exchange their game tokens for the originally deposited value
     function withdrawAsset(uint256 amount) public returns (uint256 shares) {
         return withdrawAsset(amount, msg.sender, msg.sender);
     }
 
-    // redeems game tokens for the vault token
+    /// @notice redeems game tokens for the vault token
     // TODO: do we want vault token or asset token? need functions for both
     function withdrawAsset(uint256 amount, address to, address owner) public returns (uint256 shares) {
         if (owner != msg.sender) {
             _spendAllowance(owner, msg.sender, amount);
         }
         _burn(owner, amount);
-
-        // TODO: Time-weighted average balance controller from pooltogether
 
         // withdraw takes the amount of assets and returns the number of shares burned
         // TODO: is this the right addresses?
@@ -159,8 +170,6 @@ contract GameToken is ERC20 {
             _spendAllowance(owner, msg.sender, amount);
         }
         _burn(owner, amount);
-
-        // TODO: Time-weighted average balance controller from pooltogether
 
         // calculate the amount of shares required for the withdrawal. don't actually withdraw them
         shares = vault.previewWithdraw(amount);
@@ -182,8 +191,6 @@ contract GameToken is ERC20 {
         }
 
         _burn(owner, amount);
-
-        // TODO: Time-weighted average balance controller from pooltogether
 
         // transfer the vault tokens rather than withdrawing
         vault.transfer(to, shares);
@@ -230,10 +237,21 @@ contract GameToken is ERC20 {
         totalForwardedShares += shares;
         totalForwardedValue += amount;
 
-        // TODO: optionally do multiple transfers here based on some share math
+        // TODO: the timestamp truncation/wrapping is handled inside the twab controller. but we need to make sure our contract handles that correctly, too
+        uint32 period = twabController.getTimestampPeriod(uint32(block.timestamp));
+
+        ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[period];
+
+        periodEarnings.shares += shares;
+        periodEarnings.amount += amount;
+
+        // TODO: optionally do multiple transfers here based on some share math?
         // TODO: don't just transfer. call a deposit method? this should make it more secure against inflation attacks
         vault.transfer(earningsAddress, shares);
 
         // TODO: emit an event
     }
+
+    // TODO: function that looks at the twab controller and awards points for the week based on how much interest the player brought in and their delegate twab balance
+    // TODO: allow claiming for other players
 }

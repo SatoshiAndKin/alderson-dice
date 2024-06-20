@@ -40,10 +40,10 @@ contract GameTokenTest is Test {
         console.log("vaultAsset:", address(vaultAsset));
 
         uint32 periodLength = 1 weeks;
-        uint32 periodOffset = uint32(block.timestamp / periodLength);
+        uint32 periodOffset = 0;
 
         // TODO: one already exists for pooltogether, doesn't it? use that if the period length matches what we want
-        TwabController twabController = new TwabController(periodLength, periodOffset);
+        twabController = new TwabController(periodLength, periodOffset);
 
         gameTokenMachine = new GameTokenMachine(twabController);
 
@@ -68,6 +68,8 @@ contract GameTokenTest is Test {
         console.log("numTokens:", numTokens);
 
         require(gameToken.balanceOf(alice) == numTokens, "bad balance post mint");
+
+        require(twabController.balanceOf(address(gameToken), alice) == numTokens, "bad twab balance post mint");
 
         require(gameToken.totalSupply() == numTokens, "bad total supply post mint");
 

@@ -12,8 +12,8 @@ contract DeployGameTokenMachine is Script {
         bytes32 saltGameTokenMachine = vm.envBytes32("SALT_GAME_TOKEN_MACHINE");
 
         uint32 periodLength = 1 weeks;
-        // TODO: i'm just guessing at this math, but it feels right
-        uint32 periodOffset = uint32(block.timestamp / periodLength);
+        // TODO: what should this be?
+        uint32 periodOffset = 0;
 
         // TODO: can we just re-use the existing twab controller? maybe if ones set in the env, use it. otherwise, deploy.
         TwabController twabController = new TwabController(periodLength, periodOffset);
