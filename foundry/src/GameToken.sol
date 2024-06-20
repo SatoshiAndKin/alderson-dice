@@ -8,6 +8,7 @@ pragma solidity 0.8.26;
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {ERC4626} from "@solady/tokens/ERC4626.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
+import {TwabController} from "@pooltogether-v5-twab-controller/TWABController.sol";
 
 /// @notice transform any ERC4626 vault tokens into game tokens
 contract GameTokenMachine {

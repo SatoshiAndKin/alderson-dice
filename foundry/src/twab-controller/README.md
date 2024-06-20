@@ -1,1 +1,0 @@
-copy/pasted from [pooltogether's code](https://github.com/pooltogether/v5-twab-controller). 

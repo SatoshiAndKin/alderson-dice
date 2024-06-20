@@ -2,7 +2,7 @@
 
 pragma solidity 0.8.26;
 
-import "ring-buffer-lib/RingBufferLib.sol";
+import "@ring-buffer-lib/RingBufferLib.sol";
 
 import "./OverflowSafeComparatorLib.sol";
 import { ObservationLib, MAX_CARDINALITY } from "./ObservationLib.sol";

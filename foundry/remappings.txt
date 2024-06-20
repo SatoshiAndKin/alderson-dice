@@ -1,2 +1,4 @@
 @forge-std/=lib/forge-std/src/
+@pooltogether-v5-twab-controller/=lib/pooltogether-v5-twab-controller/src/
+@ring-buffer-lib/=lib/ring-buffer-lib/src/
 @solady/=lib/solady/src/
