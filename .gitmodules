@@ -6,4 +6,4 @@
 	url = https://github.com/vectorized/solady
 [submodule "foundry/lib/ring-buffer-lib"]
 	path = foundry/lib/ring-buffer-lib
-	url = https://github.com/pooltogether/ring-buffer-lib
+	url = https://github.com/BlinkyStitt/ring-buffer-lib

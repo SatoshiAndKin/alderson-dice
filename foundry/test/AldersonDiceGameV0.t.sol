@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test, console} from "@forge-std/Test.sol";
 import {IntransitiveDiceNFT, AldersonDiceGameV0, ERC20, ERC4626, LibPRNG} from "../src/AldersonDiceGameV0.sol";
 import {YearnVaultV3, YearnVaultV3Strategy} from "../src/YearnVaultV3.sol";
 
