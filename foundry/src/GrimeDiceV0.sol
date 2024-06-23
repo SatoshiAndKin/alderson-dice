@@ -90,7 +90,17 @@ contract GrimeDiceV0 is GamePiece {
         uint256 _mintPrizeFee,
         uint256 _prngAge,
         string memory _tokenURIPrefix
-    ) GamePiece(_devFund, _gameToken, _mintDevFee, _mintPrizeFee, NUM_COLORS, _prngAge, _redemptionPrice) {
+    )
+        GamePiece(
+            _devFund,
+            _gameToken,
+            _mintDevFee,
+            _mintPrizeFee,
+            NUM_COLORS,
+            _prngAge,
+            _redemptionPrice
+        )
+    {
         devFund = _devFund;
         prizeFund = _prizeFund;
         mintDevFee = _mintDevFee;

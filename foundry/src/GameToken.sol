@@ -281,11 +281,11 @@ contract GameToken is ERC20 {
         totalForwardedValue += amount;
 
         // TODO: the timestamp truncation/wrapping is handled inside the twab controller. but we need to make sure our contract handles that correctly, too
-        uint256 period = twabController.getTimestampPeriod(
-            block.timestamp
-        );
+        uint256 period = twabController.getTimestampPeriod(block.timestamp);
 
-        ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[period];
+        ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[
+            period
+        ];
 
         periodEarnings.shares += shares;
         periodEarnings.amount += amount;
