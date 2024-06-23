@@ -13,6 +13,7 @@ contract GrimeDiceV0 is GamePiece {
     using SafeTransferLib for address;
     using LibPRNG for LibPRNG.PRNG;
 
+    // TODO: NUM_COLORS is also numAssetTypes. gas golf
     uint256 public constant NUM_COLORS = 5;
     uint256 public constant NUM_SIDES = 6;
     uint8 public constant NUM_DICE_BAG = 10;
@@ -48,20 +49,7 @@ contract GrimeDiceV0 is GamePiece {
         uint8 ties
     );
 
-    /// @notice due to rounding in the vault, this might be slightly short of the total inputs
-    mapping(address who => uint256 withdrawable) public sponsorships;
-
     string internal tokenURIPrefix;
-    address public devFund;
-    address public prizeFund;
-
-    /// @notice extra cost to mint a die. goes to the dev fund
-    uint256 public mintDevFee;
-    /// @notice extra cost to mint a die. goes directly to the prize pool
-    uint256 public mintPrizeFee;
-
-    /// @notice due to rounding of shares and the underlying token, this is an estimate. it should be close
-    uint256 public immutable refundPrice;
 
     /// @notice we could just look-up odds in a table, but i think dice with pips are a lot more fun
     struct DieInfo {
@@ -97,13 +85,12 @@ contract GrimeDiceV0 is GamePiece {
         address _devFund,
         address _prizeFund,
         GameToken _gameToken,
-        uint256 _refundPrice,
+        uint256 _redemptionPrice,
         uint256 _mintDevFee,
         uint256 _mintPrizeFee,
+        uint256 _prngAge,
         string memory _tokenURIPrefix
-    ) GamePiece(_gameToken, NUM_COLORS, _refundPrice, NUM_DICE_BAG) {
-        require(_refundPrice > 0, "!price");
-
+    ) GamePiece(_devFund, _gameToken, _mintDevFee, _mintPrizeFee, NUM_COLORS, _prngAge, _redemptionPrice) {
         devFund = _devFund;
         prizeFund = _prizeFund;
         mintDevFee = _mintDevFee;

@@ -67,6 +67,7 @@ contract GrimeDiceV0Test is Test {
             price,
             mintDevFee,
             mintPrizeFee,
+            10,
             "ipfs://alderson-dice.eth/dice/"
         );
 

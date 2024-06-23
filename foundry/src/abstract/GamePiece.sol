@@ -46,6 +46,9 @@ abstract contract GamePiece is ERC6909 {
         redemptionPrice = _redemptionPrice;
 
         buyPrice = redemptionPrice + mintDevFee + mintPrizeFee;
+
+        require(buyPrice > 0, "zero buy price");
+
         pointsToken = _gameToken.pointsToken();
     }
 
@@ -73,8 +76,8 @@ abstract contract GamePiece is ERC6909 {
             gameToken.transfer(devFund, totalMintDevFee);
         }
         if (totalMintPrizeFee > 0) {
-            // TODO: don't just transfer. if its a contract, call earningsAddress.payFees(player, totalMintPrizeFee). this function awards points to the player
-            gameToken.transfer(earningsAddress, totalMintPrizeFee);
+            // TODO: don't just transfer. if its a contract, call prizeFund.payFees(player, totalMintPrizeFee). this function awards points to the player
+            gameToken.transfer(prizeFund, totalMintPrizeFee);
         }
 
         LibPRNG.PRNG memory prng = prngTruncatedBlockNumber();

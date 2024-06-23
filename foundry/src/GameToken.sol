@@ -38,7 +38,7 @@ contract GameToken is ERC20 {
         uint256 shares;
         uint256 amount;
     }
-    mapping(uint32 => ForwardedEarnings) public forwardedEarningsByPeriod;
+    mapping(uint256 => ForwardedEarnings) public forwardedEarningsByPeriod;
 
     mapping(address => uint256 lastClaimTimestamp) public playerClaims;
 
@@ -281,13 +281,11 @@ contract GameToken is ERC20 {
         totalForwardedValue += amount;
 
         // TODO: the timestamp truncation/wrapping is handled inside the twab controller. but we need to make sure our contract handles that correctly, too
-        uint32 period = twabController.getTimestampPeriod(
-            uint32(block.timestamp)
+        uint256 period = twabController.getTimestampPeriod(
+            block.timestamp
         );
 
-        ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[
-            period
-        ];
+        ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[period];
 
         periodEarnings.shares += shares;
         periodEarnings.amount += amount;
@@ -304,24 +302,22 @@ contract GameToken is ERC20 {
         uint32 maxPeriods,
         address player
     ) public returns (uint256 points) {
-        uint32 lastClaimTimestamp = uint32(playerClaims[player]);
+        uint256 lastClaimTimestamp = uint32(playerClaims[player]);
         // if lastClaimTimestamp is 0, set it to the timestamp for the first week of rewards
         if (lastClaimTimestamp == 0) {
             lastClaimTimestamp = uint32(deployTimestamp);
         }
 
         // TODO: does this handle wrapping correctly? probably not
-        uint32 period = twabController.getTimestampPeriod(
-            uint32(lastClaimTimestamp)
-        );
-        uint32 currentPeriod = twabController.getTimestampPeriod(
-            uint32(block.timestamp)
+        uint256 period = twabController.getTimestampPeriod(lastClaimTimestamp);
+        uint256 currentPeriod = twabController.getTimestampPeriod(
+            block.timestamp
         );
 
         // TODO: is this a good way to re-use twab's periods?
-        uint32 periodDuration = twabController.PERIOD_LENGTH();
+        uint256 periodDuration = uint256(twabController.PERIOD_LENGTH());
 
-        for (uint32 i = 0; i < maxPeriods; i++) {
+        for (uint256 i = 0; i < maxPeriods; i++) {
             if (period >= currentPeriod) {
                 // don't allow claiming the current period
                 break;
@@ -331,7 +327,7 @@ contract GameToken is ERC20 {
                 storage periodEarnings = forwardedEarningsByPeriod[period];
 
             // TODO: tests for how it handles wrapping!
-            uint32 claimUpTo = uint32(lastClaimTimestamp + periodDuration);
+            uint256 claimUpTo = lastClaimTimestamp + periodDuration;
 
             uint256 weightedBalance = twabController.getTwabBetween(
                 address(this),
