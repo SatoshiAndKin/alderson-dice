@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
@@ -39,7 +39,6 @@ contract GrimeDiceV0 is GamePiece {
     /// @notice due to rounding in the vault, this might be slightly short of the total inputs
     mapping(address who => uint256 withdrawable) public sponsorships;
 
-    GameToken public gameToken;
     string internal tokenURIPrefix;
     address public devFund;
     address public prizeFund;
@@ -90,13 +89,13 @@ contract GrimeDiceV0 is GamePiece {
         uint256 _mintDevFee,
         uint256 _mintPrizeFee,
         string memory _tokenURIPrefix
-    ) {
+    )
+        GamePiece(_gameToken, NUM_COLORS, _refundPrice, NUM_DICE_BAG)
+    {
         require(_refundPrice > 0, "!price");
 
         devFund = _devFund;
-        gameToken = _gameToken;
         prizeFund = _prizeFund;
-        refundPrice = _refundPrice;
         mintDevFee = _mintDevFee;
         mintPrizeFee = _mintPrizeFee;
         tokenURIPrefix = _tokenURIPrefix;
@@ -127,23 +126,18 @@ contract GrimeDiceV0 is GamePiece {
         return diceId % NUM_COLORS;
     }
 
-    function tokenURI(uint256 id) public view returns (string memory) {
+    function tokenURI(uint256 id) public override view returns (string memory) {
         return string(abi.encodePacked(tokenURIPrefix, id));
     }
 
     // TODO: is this a good name?
-    function name(uint256 id) external view returns (string memory) {
+    function name(uint256 id) public override view returns (string memory) {
         DieInfo memory die = dice[getColor(id)];
 
         return string(abi.encodePacked(die.name, " Grime Die ", id));
     }
 
-    /// @notice there might be some rounding errors on this as tokens move through the vault
-    function priceWithFees() public view returns (uint256) {
-        return refundPrice + mintDevFee + mintPrizeFee;
-    }
-
-    function symbol(uint256 id) public view virtual returns (string memory) {
+    function symbol(uint256 id) public view override returns (string memory) {
         DieInfo memory die = dice[getColor(id)];
 
         return string(abi.encodePacked("GD", die.symbol));
@@ -158,7 +152,7 @@ contract GrimeDiceV0 is GamePiece {
 
     /// @notice a random bag currently available for purchase
     function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public pure returns (uint256[] memory bag) {
-        (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomPieces(prng, numDice);
+        (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomPieces(prng, numDice, NUM_COLORS);
 
         uint256 numIds = diceIds.length;
         uint256 bagIndex = 0;

@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.26;
 
 import "@forge-std/Script.sol";
 import "../src/GameTokenMachine.sol";
 import "../src/GameToken.sol";
-import "../src/YearnVaultV3.sol";
+import "../src/external/YearnVaultV3.sol";
 
 contract DeployGameTokenMachine is Script {
     function run() external {
@@ -17,9 +17,12 @@ contract DeployGameTokenMachine is Script {
 
         GameTokenMachine machine = new GameTokenMachine{salt: saltGameTokenMachine}(twabController);
 
-        YearnVaultV3 prizeVault = YearnVaultV3(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
+        YearnVaultV3 vault = YearnVaultV3(0x6FAF8b7fFeE3306EfcFc2BA9Fec912b4d49834C1);
 
-        machine.createGameToken(prizeVault);
+        // TODO: where should we actually send the earnings? we need a splitter contract that lets players burn their points for rewards
+        machine.createGameToken(vault, msg.sender);
+
+        // assert that the game asset is USDC?
 
         vm.stopBroadcast();
     }

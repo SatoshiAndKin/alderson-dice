@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.26;
 
 import "forge-std/Script.sol";
 import "../src/GrimeDiceV0.sol";
-import {YearnVaultV3} from "../src/YearnVaultV3.sol";
+import {YearnVaultV3} from "../src/external/YearnVaultV3.sol";
 
 contract DeployV0Script is Script {
     function run() external {

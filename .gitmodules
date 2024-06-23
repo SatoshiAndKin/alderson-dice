@@ -1,9 +1,12 @@
-[submodule "lib/forge-std"]
-	path = lib/forge-std
+[submodule "foundry/lib/forge-std"]
+	path = foundry/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "foundry/lib/pt-v5-twab-controller"]
+	path = foundry/lib/pt-v5-twab-controller
+	url = https://github.com/GenerationSoftware/pt-v5-twab-controller
 [submodule "foundry/lib/ring-buffer-lib"]
 	path = foundry/lib/ring-buffer-lib
-	url = https://github.com/BlinkyStitt/ring-buffer-lib
-[submodule "lib/solady"]
-	path = lib/solady
+	url = https://github.com/GenerationSoftware/ring-buffer-lib
+[submodule "foundry/lib/solady"]
+	path = foundry/lib/solady
 	url = https://github.com/vectorized/solady

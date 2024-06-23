@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0
 // TODO: rewrite this to take the GameTokens as a way to purchase
 // TODO: this needs to be an immutable contract. having the burn be part of the upgrade path is dangerous. at worst, only a week's prize money should be ruggable
 pragma solidity 0.8.26;
@@ -7,6 +7,7 @@ import {ERC6909} from "@solady/tokens/ERC6909.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
 import {LibPRNG} from "@solady/utils/LibPRNG.sol";
 import {GameToken} from "../GameToken.sol";
+import {PointsToken} from "../PointsToken.sol";
 
 abstract contract GamePiece is ERC6909 {
     using LibPRNG for LibPRNG.PRNG;
@@ -15,29 +16,76 @@ abstract contract GamePiece is ERC6909 {
     uint256 public totalSupply;
     mapping(uint256 => uint256) public tokenSupply;
 
-    function gameToken() public view virtual returns (GameToken);
-    function numAssetTypes() public view virtual returns (uint256);
-    function price() public view virtual returns (uint256);
-    function prngAge() public view virtual returns (uint256) {
-        return 10;
+    GameToken immutable public gameToken;
+    PointsToken immutable public pointsToken;
+
+    uint256 immutable public buyPrice;
+    address immutable public devFund;
+    address immutable public prizeFund;
+    uint256 immutable public mintDevFee;
+    uint256 immutable public mintPrizeFee;
+    uint256 immutable public numAssetTypes;
+    uint256 immutable public prngAge;
+    uint256 immutable public redemptionPrice;
+
+
+    constructor(
+        address _devFund,
+        GameToken _gameToken,
+        uint256 _mintDevFee,
+        uint256 _mintPrizeFee,
+        uint256 _numAssetTypes,
+        uint256 _prngAge,
+        uint256 _redemptionPrice
+    ) {
+        devFund = _devFund;
+        gameToken = _gameToken;
+        mintDevFee = _mintDevFee;
+        mintPrizeFee = _mintPrizeFee;
+        numAssetTypes = _numAssetTypes;
+        prngAge = _prngAge;
+        redemptionPrice = _redemptionPrice;
+
+        buyPrice = redemptionPrice + mintDevFee + mintPrizeFee;
+        pointsToken = _gameToken.pointsToken();
     }
 
-    function buy(uint256 numPieces, address to) public {
-        uint256 amount = price() * numPieces;
+    modifier decentralizedButtonPushing() {
+        _;
 
-        GameToken g = gameToken();
+        // TODO: put this in a try and ignore errors. we don't want to block the whole contract
+        // TODO: only do if a certain amount of time has passed since the last time this was run
+        revert("forward earnings, claim points, etc.");
+    }
 
-        g.transferFrom(msg.sender, address(this), amount);
+    function buy(uint256 numPieces, address player) decentralizedButtonPushing public returns (uint256 totalCost) {
+        uint256 totalRedeemableValue = redemptionPrice * numPieces;
+        uint256 totalMintDevFee = mintDevFee * numPieces;
+        uint256 totalMintPrizeFee = mintPrizeFee * numPieces;
+        
+        totalCost = totalRedeemableValue + totalMintDevFee + totalMintPrizeFee;
+
+        gameToken.transferFrom(msg.sender, address(this), totalCost);
+
+        if (totalMintDevFee > 0) {
+            gameToken.transfer(devFund, totalMintDevFee);
+        }
+        if (totalMintPrizeFee > 0) {
+            // TODO: don't just transfer. if its a contract, call earningsAddress.payFees(player, totalMintPrizeFee). this function awards points to the player
+            gameToken.transfer(earningsAddress, totalMintPrizeFee);
+        }
 
         LibPRNG.PRNG memory prng = prngTruncatedBlockNumber();
 
-        (uint256[] memory tokenIds, uint256[] memory tokenAmounts) = randomPieces(prng, numPieces);
+        // TODO: blinded bag of pieces that is claimed in the future? i like the idea of predicting what you can buy though. blind random buys make me feel icky
+        (uint256[] memory tokenIds, uint256[] memory tokenAmounts) = randomPieces(prng, numPieces, numAssetTypes);
 
-        _mint(to, tokenIds, tokenAmounts);
+        _mintBulk(player, tokenIds, tokenAmounts);
     }
 
+    // use the same prng for a range of blocks
     function prngTruncatedBlockNumber() public view returns (LibPRNG.PRNG memory prng) {
-        return prngNumber(block.number / prngAge());
+        return prngNumber(block.number / prngAge);
     }
 
     /// @dev TODO: THIS IS PREDICTABLE! KEEP THINKING ABOUT THIS
@@ -100,6 +148,7 @@ abstract contract GamePiece is ERC6909 {
 
     /// @notice the player (or an operator) can sell their game pieces to recover their cost
     function sell(address player, uint256[] calldata diceIds, uint256[] calldata diceAmounts)
+        decentralizedButtonPushing
         external
         returns (uint256 refundAssets)
     {
@@ -111,17 +160,15 @@ abstract contract GamePiece is ERC6909 {
 
         uint256 burned = _burn(player, diceIds, diceAmounts);
 
-        refundAssets = burned * price();
+        refundAssets = burned * redemptionPrice;
 
-        GameToken g = gameToken();
-
-        g.transfer(player, refundAssets);
+        gameToken.transfer(player, refundAssets);
 
         // playerInfo.burned += burned;
     }
 
     /// @dev be sure the underlying token has already been transferred here
-    function _mint(address receiver, uint256[] calldata tokenIds, uint256[] calldata amounts)
+    function _mintBulk(address receiver, uint256[] memory tokenIds, uint256[] memory amounts)
         private
         returns (uint256 minted)
     {

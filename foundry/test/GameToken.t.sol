@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.26;
 
 import {Test, console} from "@forge-std/Test.sol";
 import {GameTokenMachine} from "../src/GameTokenMachine.sol";
 import {GameToken, ERC20, ERC4626} from "../src/GameToken.sol";
-import {YearnVaultV3, YearnVaultV3Strategy} from "../src/YearnVaultV3.sol";
+import {YearnVaultV3, YearnVaultV3Strategy} from "../src/external/YearnVaultV3.sol";
 import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 
 // TODO: make sure one user depositing doesn't reduce the value of another user's tokens
@@ -40,11 +40,8 @@ contract GameTokenTest is Test {
 
         console.log("vaultAsset:", address(vaultAsset));
 
-        uint32 periodLength = 1 weeks;
-        uint32 periodOffset = 0;
-
-        // TODO: one already exists for pooltogether, doesn't it? use that if the period length matches what we want
-        twabController = new TwabController(periodLength, periodOffset);
+        // <https://dev.pooltogether.com/protocol/deployments/arbitrum>
+        twabController = TwabController(0x971ECc4E75c5FcFd8fc3eADc8F0c900b5914DC75);
 
         gameTokenMachine = new GameTokenMachine(twabController);
 

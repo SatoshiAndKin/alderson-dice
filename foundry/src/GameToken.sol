@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0
 // TODO: i don't love the name. kind of like chips in a casino or nickles in an arcade
 pragma solidity 0.8.26;
 
@@ -8,10 +8,13 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {ERC4626} from "@solady/tokens/ERC4626.sol";
+import {FixedPointMathLib} from "@solady/utils/FixedPointMathLib.sol";
+import {PointsToken} from "./PointsToken.sol";
 import {SafeCastLib} from "@solady/utils/SafeCastLib.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 
+// TODO: rewrite this as an ERC4626?
 contract GameToken is ERC20 {
     using SafeTransferLib for address;
 
@@ -20,6 +23,8 @@ contract GameToken is ERC20 {
 
     ERC4626 immutable public vault;
 
+    PointsToken immutable public pointsToken;
+
     ERC20 immutable public asset;
     uint8 immutable internal assetDecimals;
 
@@ -27,6 +32,7 @@ contract GameToken is ERC20 {
     uint256 public totalForwardedValue;
 
     address immutable public earningsAddress;
+    uint32 immutable internal deployTimestamp;
 
     struct ForwardedEarnings {
         uint256 shares;
@@ -34,15 +40,32 @@ contract GameToken is ERC20 {
     }
     mapping(uint32 => ForwardedEarnings) public forwardedEarningsByPeriod;
 
-    constructor(TwabController _twabController, ERC4626 _vault, address _earningsAddress) {
+    mapping(address => uint256 lastClaimTimestamp) public playerClaims;
+
+    constructor(ERC20 _asset, address _earningsAddress, TwabController _twabController, ERC4626 _vault) {
         twabController = _twabController;
 
         vault = _vault;
 
-        asset = ERC20(vault.asset());
-        assetDecimals = asset.decimals();
+        asset = _asset;
+        assetDecimals = _asset.decimals();
+
+        // TODO: use LibClone for PointsToken. the token uses immutables though so we need to figure out clones with immutables
+        pointsToken = new PointsToken(asset, twabController);
+
+        // used to optimize the initial claim
+        deployTimestamp = uint32(block.timestamp);
 
         earningsAddress = _earningsAddress;
+    }
+
+    modifier decentralizedButtonPushing() {
+        _;
+
+        // TODO: put this in a try and ignore errors. we don't want to block the whole contract
+        // TODO: only do if a certain amount of time has passed since the last time this was run
+        // TODO: only do this if the vault share price has changed
+        forwardEarnings();
     }
 
     /// @dev Hook that is called after any transfer of tokens.
@@ -118,13 +141,13 @@ contract GameToken is ERC20 {
     }
 
     /// @notice the primary function for users to exchange their game tokens for the originally deposited value
-    function withdrawAsset(uint256 amount) public returns (uint256 shares) {
+    function withdrawAsset(uint256 amount) decentralizedButtonPushing public returns (uint256 shares) {
         return withdrawAsset(amount, msg.sender, msg.sender);
     }
 
     /// @notice redeems game tokens for the vault token
     // TODO: do we want vault token or asset token? need functions for both
-    function withdrawAsset(uint256 amount, address to, address owner) public returns (uint256 shares) {
+    function withdrawAsset(uint256 amount, address to, address owner) decentralizedButtonPushing public returns (uint256 shares) {
         if (owner != msg.sender) {
             _spendAllowance(owner, msg.sender, amount);
         }
@@ -138,12 +161,12 @@ contract GameToken is ERC20 {
         address(asset).safeTransfer(to, amount);
     }
 
-    function withdrawAssetAsVault(uint256 amount) public returns (uint256 shares) {
+    function withdrawAssetAsVault(uint256 amount) decentralizedButtonPushing public returns (uint256 shares) {
         return withdrawAssetAsVault(amount, msg.sender, msg.sender);
     }
 
     /// @notice this method is necessary if the vault has limited withdrawal capacity
-    function withdrawAssetAsVault(uint256 amount, address to, address owner) public returns (uint256 shares) {
+    function withdrawAssetAsVault(uint256 amount, address to, address owner) decentralizedButtonPushing public returns (uint256 shares) {
         if (owner != msg.sender) {
             _spendAllowance(owner, msg.sender, amount);
         }
@@ -156,11 +179,11 @@ contract GameToken is ERC20 {
         vault.transfer(to, shares);
     }
 
-    function withdrawVault(uint256 shares) public returns (uint256 amount) {
+    function withdrawVault(uint256 shares) decentralizedButtonPushing public returns (uint256 amount) {
         return withdrawVault(shares, msg.sender, msg.sender);
     }
 
-    function withdrawVault(uint256 shares, address to, address owner) public returns (uint256 amount) {
+    function withdrawVault(uint256 shares, address to, address owner) decentralizedButtonPushing public returns (uint256 amount) {
         // redeem takes the amount of shares
         amount = vault.previewRedeem(shares);
 
@@ -191,7 +214,7 @@ contract GameToken is ERC20 {
         uint256 sharesNeeded = vault.previewWithdraw(totalTokenValue);
 
         if (sharesNeeded <= vaultBalance) {
-            return shares;
+            return 0;
         }
 
         shares = sharesNeeded - vaultBalance;
@@ -200,7 +223,9 @@ contract GameToken is ERC20 {
     function excess() public view returns (uint256 shares, uint256 amount) {
         shares = excessShares();
 
-        amount = vault.previewRedeem(shares);
+        if (shares > 0) {
+            amount = vault.previewRedeem(shares);
+        }
     }
 
     function forwardEarnings() public returns (uint256 shares, uint256 amount) {
@@ -230,6 +255,44 @@ contract GameToken is ERC20 {
         // TODO: emit an event
     }
 
-    // TODO: function that looks at the twab controller and awards points for the week based on how much interest the player brought in and their delegate twab balance
-    // TODO: allow claiming for other players
+    // TODO: this is going to need a lot of thought. we need to make sure we don't allow people to claim multiple times in the same period
+    function claimPoints(uint32 maxPeriods, address player) public returns (uint256 points) {
+        uint32 lastClaimTimestamp = uint32(playerClaims[player]);
+        // if lastClaimTimestamp is 0, set it to the timestamp for the first week of rewards
+        if (lastClaimTimestamp == 0) {
+            lastClaimTimestamp = uint32(deployTimestamp);
+        }
+
+        // TODO: does this handle wrapping correctly? probably not
+        uint32 period = twabController.getTimestampPeriod(uint32(lastClaimTimestamp));
+        uint32 currentPeriod = twabController.getTimestampPeriod(uint32(block.timestamp));
+
+        // TODO: is this a good way to re-use twab's periods?
+        uint32 periodDuration = twabController.PERIOD_LENGTH();
+
+        for (uint32 i = 0; i < maxPeriods; i++) {
+            if (period >= currentPeriod) {
+                // don't allow claiming the current period
+                break;
+            }
+
+            ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[period];
+
+            // TODO: tests for how it handles wrapping!
+            uint32 claimUpTo = uint32(lastClaimTimestamp + periodDuration);
+
+            uint256 weightedBalance = twabController.getTwabBetween(address(this), player, lastClaimTimestamp, claimUpTo);
+            uint256 weightedTotalSupply = twabController.getTotalSupplyTwabBetween(address(this), lastClaimTimestamp, claimUpTo);
+
+            points += FixedPointMathLib.fullMulDiv(periodEarnings.amount, weightedBalance, weightedTotalSupply);
+
+            period += 1;
+            lastClaimTimestamp = claimUpTo;
+        }
+
+        // update storage once after the loop
+        playerClaims[player] = lastClaimTimestamp;
+
+        pointsToken.mint(player, points);
+    }
 }
