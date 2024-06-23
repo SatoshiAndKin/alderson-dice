@@ -7,7 +7,6 @@
 [submodule "foundry/lib/ring-buffer-lib"]
 	path = foundry/lib/ring-buffer-lib
 	url = https://github.com/GenerationSoftware/ring-buffer-lib
-
 [submodule "foundry/lib/solady"]
 	path = foundry/lib/solady
 	url = https://github.com/vectorized/solady
