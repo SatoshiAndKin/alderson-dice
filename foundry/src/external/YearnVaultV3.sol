@@ -24,10 +24,15 @@ abstract contract YearnVaultV3 is ERC4626 {
         PROFIT_UNLOCK_MANAGER, // Sets the profit_max_unlock_time.
         DEBT_PURCHASER, // Can purchase bad debt from the vault.
         EMERGENCY_MANAGER // Can shutdown vault in an emergency.
-
     }
 
-    function default_queue(uint256 i) external view virtual returns (YearnVaultV3Strategy);
-    function get_default_queue() external view virtual returns (YearnVaultV3Strategy[] memory);
+    function default_queue(
+        uint256 i
+    ) external view virtual returns (YearnVaultV3Strategy);
+    function get_default_queue()
+        external
+        view
+        virtual
+        returns (YearnVaultV3Strategy[] memory);
     function process_report(YearnVaultV3Strategy strategy) external virtual;
 }

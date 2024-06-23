@@ -33,8 +33,20 @@ contract GrimeDiceV0 is GamePiece {
     // this is probably way too much data to emit, but we only expect this to be called off-chain so it should be okay
     // TODO: but wait. do we get logs out of eth_call. i think maybe we will need to return the data instead. hmm
     event SkirmishBags(uint256 draws, uint256[] diceBag0, uint256[] diceBag1);
-    event SkirmishColor(uint256 color0, uint256 color1, uint16 round, uint256 side0, uint256 side1);
-    event SkirmishPlayers(address indexed player0, address indexed player1, uint8 wins0, uint8 wins1, uint8 ties);
+    event SkirmishColor(
+        uint256 color0,
+        uint256 color1,
+        uint16 round,
+        uint256 side0,
+        uint256 side1
+    );
+    event SkirmishPlayers(
+        address indexed player0,
+        address indexed player1,
+        uint8 wins0,
+        uint8 wins1,
+        uint8 ties
+    );
 
     /// @notice due to rounding in the vault, this might be slightly short of the total inputs
     mapping(address who => uint256 withdrawable) public sponsorships;
@@ -89,9 +101,7 @@ contract GrimeDiceV0 is GamePiece {
         uint256 _mintDevFee,
         uint256 _mintPrizeFee,
         string memory _tokenURIPrefix
-    )
-        GamePiece(_gameToken, NUM_COLORS, _refundPrice, NUM_DICE_BAG)
-    {
+    ) GamePiece(_gameToken, NUM_COLORS, _refundPrice, NUM_DICE_BAG) {
         require(_refundPrice > 0, "!price");
 
         devFund = _devFund;
@@ -126,12 +136,12 @@ contract GrimeDiceV0 is GamePiece {
         return diceId % NUM_COLORS;
     }
 
-    function tokenURI(uint256 id) public override view returns (string memory) {
+    function tokenURI(uint256 id) public view override returns (string memory) {
         return string(abi.encodePacked(tokenURIPrefix, id));
     }
 
     // TODO: is this a good name?
-    function name(uint256 id) public override view returns (string memory) {
+    function name(uint256 id) public view override returns (string memory) {
         DieInfo memory die = dice[getColor(id)];
 
         return string(abi.encodePacked(die.name, " Grime Die ", id));
@@ -151,8 +161,15 @@ contract GrimeDiceV0 is GamePiece {
     }
 
     /// @notice a random bag currently available for purchase
-    function currentBag(LibPRNG.PRNG memory prng, uint256 numDice) public pure returns (uint256[] memory bag) {
-        (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomPieces(prng, numDice, NUM_COLORS);
+    function currentBag(
+        LibPRNG.PRNG memory prng,
+        uint256 numDice
+    ) public pure returns (uint256[] memory bag) {
+        (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomPieces(
+            prng,
+            numDice,
+            NUM_COLORS
+        );
 
         uint256 numIds = diceIds.length;
         uint256 bagIndex = 0;
@@ -170,7 +187,10 @@ contract GrimeDiceV0 is GamePiece {
     }
 
     // TODO: this is just to make off-chain calculations easy
-    function scorePips(uint256[] memory pips0, uint256[] memory pips1) public pure returns (uint256 wins0, uint256 wins1, uint256 ties) {
+    function scorePips(
+        uint256[] memory pips0,
+        uint256[] memory pips1
+    ) public pure returns (uint256 wins0, uint256 wins1, uint256 ties) {
         uint256 numDice = pips0.length;
 
         require(numDice == pips1.length, "!len");
@@ -193,7 +213,10 @@ contract GrimeDiceV0 is GamePiece {
         }
     }
 
-    function rollDice(LibPRNG.PRNG memory prng, uint256[] memory orderedDice) public view returns (uint256[] memory pips) {
+    function rollDice(
+        LibPRNG.PRNG memory prng,
+        uint256[] memory orderedDice
+    ) public view returns (uint256[] memory pips) {
         // TODO: add something about the bag to the prng?
 
         uint256 bagSize = orderedDice.length;
@@ -220,7 +243,9 @@ contract GrimeDiceV0 is GamePiece {
         pips = rollDice(prng, bag);
     }
 
-    function rollPlayerBag(address player) public view returns (uint256[] memory pips) {
+    function rollPlayerBag(
+        address player
+    ) public view returns (uint256[] memory pips) {
         // copy the player's chosen dice into memory
         uint256[] memory bag = new uint256[](NUM_DICE_BAG);
         for (uint256 i = 0; i < NUM_DICE_BAG; i++) {
@@ -234,7 +259,9 @@ contract GrimeDiceV0 is GamePiece {
 
     /// @notice returns the faceId of a given die being rolled
     /// @dev TODO: think a lot more about this. include the diceId in here?
-    function randomRoll(LibPRNG.PRNG memory prng) public pure returns (uint256 faceId) {
+    function randomRoll(
+        LibPRNG.PRNG memory prng
+    ) public pure returns (uint256 faceId) {
         faceId = prng.next() % NUM_SIDES;
     }
 
@@ -275,9 +302,15 @@ contract GrimeDiceV0 is GamePiece {
     // }
 
     // TODO: how should we allow people to set their dice bags? let playerInfo approve another contract to do it. maybe just overload the operator on the NFT?
-    function chooseDice(address player, uint256[NUM_DICE_BAG] calldata chosenDice) public {
+    function chooseDice(
+        address player,
+        uint256[NUM_DICE_BAG] calldata chosenDice
+    ) public {
         // TODO: double check the order on isOperator
-        require(player == msg.sender || isOperator(player, msg.sender), "!auth");
+        require(
+            player == msg.sender || isOperator(player, msg.sender),
+            "!auth"
+        );
 
         PlayerInfo storage playerInfo = players[player];
 
@@ -329,9 +362,17 @@ contract GrimeDiceV0 is GamePiece {
     //     revert("move this fully to GamePiece.sol");
     // }
 
-    function skirmishPrng(address player) public view returns (LibPRNG.PRNG memory prng) {
+    function skirmishPrng(
+        address player
+    ) public view returns (LibPRNG.PRNG memory prng) {
         // TODO: i didn't think i'd need block.number here, but prevrandao wasn't changing like i expected. maybe on arbitrum it changes less often?
-        prng.seed(uint256(keccak256(abi.encodePacked(block.prevrandao, block.number, player))));
+        prng.seed(
+            uint256(
+                keccak256(
+                    abi.encodePacked(block.prevrandao, block.number, player)
+                )
+            )
+        );
     }
 
     /*

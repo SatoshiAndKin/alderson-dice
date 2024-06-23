@@ -15,7 +15,11 @@ import {GameToken} from "./GameToken.sol";
 
 /// @notice transform any ERC4626 vault token into a gamified tokens where the interest is sent to a contract that earns points
 contract GameTokenMachine {
-    event GameTokenCreated(address indexed gameToken, address indexed vault, address indexed earnings);
+    event GameTokenCreated(
+        address indexed gameToken,
+        address indexed vault,
+        address indexed earnings
+    );
 
     TwabController public immutable twabController;
 
@@ -25,13 +29,21 @@ contract GameTokenMachine {
 
     // TODO: should earnings be a list? maybe with a list for shares too? that seems like a common need
     // while we could let them choose a twab controller, this seems safer
-    function createGameToken(ERC4626 vault, address earnings) public returns (GameToken gameToken) {
+    function createGameToken(
+        ERC4626 vault,
+        address earnings
+    ) public returns (GameToken gameToken) {
         ERC20 asset = ERC20(vault.asset());
 
         // TODO: use LibClone for GameToken. the token uses immutables though so we need to figure out clones with immutables
         // TODO: i don't think we want to allow a customizeable salt
         // create2 is important so addresses are predictable
-        gameToken = new GameToken{salt: bytes32(0)}(asset, earnings, twabController, vault);
+        gameToken = new GameToken{salt: bytes32(0)}(
+            asset,
+            earnings,
+            twabController,
+            vault
+        );
 
         emit GameTokenCreated(address(gameToken), address(vault), earnings);
     }

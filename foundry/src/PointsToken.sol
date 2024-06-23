@@ -13,11 +13,11 @@ import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 
 contract PointsToken is ERC20 {
-    address immutable public gameToken;
-    ERC20 immutable public asset;
+    address public immutable gameToken;
+    ERC20 public immutable asset;
 
     // TODO: this tracks the balances, but ERC20 also tracks the balance. we should probably improve that
-    TwabController immutable public twabController;
+    TwabController public immutable twabController;
 
     constructor(ERC20 _asset, TwabController _twabController) {
         asset = _asset;
@@ -28,12 +28,21 @@ contract PointsToken is ERC20 {
     /// @dev Hook that is called after any transfer of tokens.
     /// This includes minting and burning.
     /// TODO: Time-weighted average balance controller from pooltogether takes a uint96, not a uint256. this might cause problems
-    function _afterTokenTransfer(address from, address to, uint256 amount) internal override {
+    function _afterTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override {
         twabController.transfer(from, to, SafeCastLib.toUint96(amount));
     }
 
     /// @dev we don't control the vault and so name might change
-    function _constantNameHash() internal view override returns (bytes32 result) {
+    function _constantNameHash()
+        internal
+        view
+        override
+        returns (bytes32 result)
+    {
         return keccak256(bytes(name()));
     }
 

@@ -16,18 +16,17 @@ abstract contract GamePiece is ERC6909 {
     uint256 public totalSupply;
     mapping(uint256 => uint256) public tokenSupply;
 
-    GameToken immutable public gameToken;
-    PointsToken immutable public pointsToken;
+    GameToken public immutable gameToken;
+    PointsToken public immutable pointsToken;
 
-    uint256 immutable public buyPrice;
-    address immutable public devFund;
-    address immutable public prizeFund;
-    uint256 immutable public mintDevFee;
-    uint256 immutable public mintPrizeFee;
-    uint256 immutable public numAssetTypes;
-    uint256 immutable public prngAge;
-    uint256 immutable public redemptionPrice;
-
+    uint256 public immutable buyPrice;
+    address public immutable devFund;
+    address public immutable prizeFund;
+    uint256 public immutable mintDevFee;
+    uint256 public immutable mintPrizeFee;
+    uint256 public immutable numAssetTypes;
+    uint256 public immutable prngAge;
+    uint256 public immutable redemptionPrice;
 
     constructor(
         address _devFund,
@@ -58,11 +57,14 @@ abstract contract GamePiece is ERC6909 {
         revert("forward earnings, claim points, etc.");
     }
 
-    function buy(uint256 numPieces, address player) decentralizedButtonPushing public returns (uint256 totalCost) {
+    function buy(
+        uint256 numPieces,
+        address player
+    ) public decentralizedButtonPushing returns (uint256 totalCost) {
         uint256 totalRedeemableValue = redemptionPrice * numPieces;
         uint256 totalMintDevFee = mintDevFee * numPieces;
         uint256 totalMintPrizeFee = mintPrizeFee * numPieces;
-        
+
         totalCost = totalRedeemableValue + totalMintDevFee + totalMintPrizeFee;
 
         gameToken.transferFrom(msg.sender, address(this), totalCost);
@@ -78,19 +80,28 @@ abstract contract GamePiece is ERC6909 {
         LibPRNG.PRNG memory prng = prngTruncatedBlockNumber();
 
         // TODO: blinded bag of pieces that is claimed in the future? i like the idea of predicting what you can buy though. blind random buys make me feel icky
-        (uint256[] memory tokenIds, uint256[] memory tokenAmounts) = randomPieces(prng, numPieces, numAssetTypes);
+        (
+            uint256[] memory tokenIds,
+            uint256[] memory tokenAmounts
+        ) = randomPieces(prng, numPieces, numAssetTypes);
 
         _mintBulk(player, tokenIds, tokenAmounts);
     }
 
     // use the same prng for a range of blocks
-    function prngTruncatedBlockNumber() public view returns (LibPRNG.PRNG memory prng) {
+    function prngTruncatedBlockNumber()
+        public
+        view
+        returns (LibPRNG.PRNG memory prng)
+    {
         return prngNumber(block.number / prngAge);
     }
 
     /// @dev TODO: THIS IS PREDICTABLE! KEEP THINKING ABOUT THIS
     /// I think predictable is fine for most of this game's random. I want players able to plan ahead some.
-    function prngNumber(uint256 n) public pure returns (LibPRNG.PRNG memory prng) {
+    function prngNumber(
+        uint256 n
+    ) public pure returns (LibPRNG.PRNG memory prng) {
         prng.seed(n);
     }
 
@@ -101,7 +112,11 @@ abstract contract GamePiece is ERC6909 {
         prng.seed(uint256(block.prevrandao));
     }
 
-    function randomPieces(LibPRNG.PRNG memory prng, uint256 numPieces, uint256 numTypes)
+    function randomPieces(
+        LibPRNG.PRNG memory prng,
+        uint256 numPieces,
+        uint256 numTypes
+    )
         public
         pure
         returns (uint256[] memory tokenIds, uint256[] memory amounts)
@@ -147,12 +162,15 @@ abstract contract GamePiece is ERC6909 {
     }
 
     /// @notice the player (or an operator) can sell their game pieces to recover their cost
-    function sell(address player, uint256[] calldata diceIds, uint256[] calldata diceAmounts)
-        decentralizedButtonPushing
-        external
-        returns (uint256 refundAssets)
-    {
-        require(player == msg.sender || isOperator(player, msg.sender), "!auth");
+    function sell(
+        address player,
+        uint256[] calldata diceIds,
+        uint256[] calldata diceAmounts
+    ) external decentralizedButtonPushing returns (uint256 refundAssets) {
+        require(
+            player == msg.sender || isOperator(player, msg.sender),
+            "!auth"
+        );
 
         uint256 length = diceIds.length;
 
@@ -168,10 +186,11 @@ abstract contract GamePiece is ERC6909 {
     }
 
     /// @dev be sure the underlying token has already been transferred here
-    function _mintBulk(address receiver, uint256[] memory tokenIds, uint256[] memory amounts)
-        private
-        returns (uint256 minted)
-    {
+    function _mintBulk(
+        address receiver,
+        uint256[] memory tokenIds,
+        uint256[] memory amounts
+    ) private returns (uint256 minted) {
         uint256 length = tokenIds.length;
 
         require(length == amounts.length, "length");
@@ -199,10 +218,11 @@ abstract contract GamePiece is ERC6909 {
     }
 
     /// @dev this seems dangerous. be careful to not lock up any underlying assets!
-    function _burn(address owner, uint256[] calldata tokenIds, uint256[] calldata amounts)
-        private
-        returns (uint256 burned)
-    {
+    function _burn(
+        address owner,
+        uint256[] calldata tokenIds,
+        uint256[] calldata amounts
+    ) private returns (uint256 burned) {
         uint256 length = tokenIds.length;
 
         require(length == amounts.length, "length");
