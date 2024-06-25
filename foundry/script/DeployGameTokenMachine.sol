@@ -2,8 +2,8 @@
 pragma solidity 0.8.26;
 
 import "@forge-std/Script.sol";
-import "../src/GameTokenMachine.sol";
-import "../src/GameToken.sol";
+import "../src/public_goods/GameTokenMachine.sol";
+import "../src/public_goods/GameToken.sol";
 import "../src/external/YearnVaultV3.sol";
 
 contract DeployGameTokenMachine is Script {

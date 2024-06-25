@@ -3,9 +3,9 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {Test, console} from "@forge-std/Test.sol";
-import {PointsToken} from "../src/PointsToken.sol";
-import {GameToken, GrimeDiceV0, ERC4626, LibPRNG} from "../src/GrimeDiceV0.sol";
-import {GameTokenMachine, TwabController} from "../src/GameTokenMachine.sol";
+import {PointsToken} from "../src/public_goods/PointsToken.sol";
+import {GameToken, GrimeDiceV0, ERC4626, LibPRNG} from "../src/games/GrimeDiceV0.sol";
+import {GameTokenMachine, TwabController} from "../src/public_goods/GameTokenMachine.sol";
 import {YearnVaultV3, YearnVaultV3Strategy} from "../src/external/YearnVaultV3.sol";
 
 contract GrimeDiceV0Test is Test {
@@ -50,17 +50,17 @@ contract GrimeDiceV0Test is Test {
         // give enough tokens to buy 100 dice
         deal(address(prizeToken), address(this), 1_000 * price);
 
-        // <https://dev.pooltogether.com/protocol/deployments/arbitrum>
-        twabController = TwabController(0x971ECc4E75c5FcFd8fc3eADc8F0c900b5914DC75);
+        // TODO: what should offset be? i think we should round the nearest epoch week
+        twabController = new TwabController(1 weeks, uint32(block.timestamp - 1));
 
         gameTokenMachine = new GameTokenMachine(twabController);
 
+        // TODO: rename createGameToken to createGameChips
         gameToken = gameTokenMachine.createGameToken(prizeVault, owner);
 
         // changing price while we run breaks redeeming dice. but it makes tests a bit of a pain. i guess make a helper function for this?
         // how should we allow changing the tokenURI?
         diceToken = new GrimeDiceV0(
-            owner,
             devFund,
             prizeFund,
             gameToken,
@@ -70,9 +70,6 @@ contract GrimeDiceV0Test is Test {
             10,
             "ipfs://alderson-dice.eth/dice/"
         );
-
-        revert("no upgrade refactor is a wip");
-        // nft.upgrade(address(game), false);
     }
 
     function test_buySomeDice() public {
@@ -287,27 +284,28 @@ contract GrimeDiceV0Test is Test {
     //     require(game.devFund() == devFund);
     // }
 
-    function testFuzz_prankedNftMint(address to, uint256 id) public {
-        vm.assume(to != address(0));
+    // TODO: think about this test now that the mint contract isn't split apart
+    // function testFuzz_prankedNftMint(address to, uint256 id) public {
+    //     vm.assume(to != address(0));
 
-        uint256 amount = 10;
+    //     uint256 amount = 10;
 
-        vm.assume(id > 0);
-        vm.assume(id < 6);
+    //     vm.assume(id > 0);
+    //     vm.assume(id < 6);
 
-        uint256[] memory mintIds = new uint256[](1);
-        uint256[] memory mintAmounts = new uint256[](1);
+    //     uint256[] memory mintIds = new uint256[](1);
+    //     uint256[] memory mintAmounts = new uint256[](1);
 
-        mintIds[0] = id;
-        mintAmounts[0] = amount;
+    //     mintIds[0] = id;
+    //     mintAmounts[0] = amount;
 
-        // vm.prank(address(gameToken));
-        // nft.mint(to, mintIds, mintAmounts);
+    //     vm.prank(address(gameToken));
+    //     gameToken.mint(to, mintIds, mintAmounts);
 
-        // require(nft.balanceOf(to, 0) == 0, "zero balance isn't empty");
-        // require(nft.balanceOf(to, id) == amount, "unexpected balance");
-        // require(nft.balanceOf(to, id + 1) == 0, "other balance isn't empty");
+    //     // require(nft.balanceOf(to, 0) == 0, "zero balance isn't empty");
+    //     // require(nft.balanceOf(to, id) == amount, "unexpected balance");
+    //     // require(nft.balanceOf(to, id + 1) == 0, "other balance isn't empty");
 
-        revert("finish refactoring this");
-    }
+    //     revert("finish refactoring this");
+    // }
 }

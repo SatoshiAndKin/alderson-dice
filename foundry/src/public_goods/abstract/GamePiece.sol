@@ -6,8 +6,7 @@ pragma solidity 0.8.26;
 import {ERC6909} from "@solady/tokens/ERC6909.sol";
 import {Ownable} from "@solady/auth/Ownable.sol";
 import {LibPRNG} from "@solady/utils/LibPRNG.sol";
-import {GameToken} from "../GameToken.sol";
-import {PointsToken} from "../PointsToken.sol";
+import {GameToken, PointsToken} from "../GameToken.sol";
 
 abstract contract GamePiece is ERC6909 {
     using LibPRNG for LibPRNG.PRNG;
@@ -57,7 +56,7 @@ abstract contract GamePiece is ERC6909 {
 
         // TODO: put this in a try and ignore errors. we don't want to block the whole contract
         // TODO: only do if a certain amount of time has passed since the last time this was run
-        revert("forward earnings, claim points, etc.");
+        // revert("forward earnings, claim points, etc.");
     }
 
     function buy(

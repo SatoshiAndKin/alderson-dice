@@ -1,0 +1,1 @@
+// a "game" contract that sends 100% of the interest points earned 

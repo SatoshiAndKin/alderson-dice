@@ -33,7 +33,15 @@ contract PointsToken is ERC20 {
         address to,
         uint256 amount
     ) internal override {
-        twabController.transfer(from, to, SafeCastLib.toUint96(amount));
+        uint96 amount96 = SafeCastLib.toUint96(amount);
+        
+        if (from == address(0)) {
+            twabController.mint(to, amount96);
+        } else if (to == address(0)) {
+            twabController.burn(from, amount96);
+        } else {
+            twabController.transfer(from, to, amount96);
+        }
     }
 
     /// @dev we don't control the vault and so name might change

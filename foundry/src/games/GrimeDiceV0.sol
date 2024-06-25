@@ -3,8 +3,7 @@ pragma solidity 0.8.26;
 
 import {ERC20} from "@solady/tokens/ERC20.sol";
 import {ERC4626} from "@solady/tokens/ERC4626.sol";
-import {GameToken} from "./GameToken.sol";
-import {GamePiece} from "./abstract/GamePiece.sol";
+import {GamePiece, GameToken} from "../public_goods/abstract/GamePiece.sol";
 import {LibPRNG} from "@solady/utils/LibPRNG.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "@solady/utils/FixedPointMathLib.sol";
@@ -81,7 +80,6 @@ contract GrimeDiceV0 is GamePiece {
 
     /// TODO: how to do different prices for different vault tokens? once set, we can't change the refundPrice! but the other prices can change
     constructor(
-        address _owner,
         address _devFund,
         address _prizeFund,
         GameToken _gameToken,
@@ -262,42 +260,6 @@ contract GrimeDiceV0 is GamePiece {
         faceId = prng.next() % NUM_SIDES;
     }
 
-    // function _buyDice(
-    //     LibPRNG.PRNG memory prng,
-    //     address receiver,
-    //     uint256 numDice,
-    //     uint256 shares,
-    //     uint256 _priceWithFees
-    // ) internal {
-    //     PlayerInfo storage playerInfo = players[receiver];
-
-    //     playerInfo.minted += numDice;
-
-    //     uint256 prizeFundShares = FixedPointMathLib.fullMulDiv(shares, mintPrizeFee, _priceWithFees);
-    //     uint256 devFundShares = FixedPointMathLib.fullMulDiv(shares, mintDevFee, _priceWithFees);
-
-    //     uint256 diceShares = shares - prizeFundShares - devFundShares;
-
-    //     // handle any rounding errors
-    //     uint256 newDiceValue = vaultToken.previewRedeem(diceShares);
-    //     uint256 devFundAmount = vaultToken.previewRedeem(devFundShares);
-
-    //     // the other half of the shares' value (with fixes for rounding errors) are given to the devFund
-    //     // we keep them in the game to boost interest, but they can be withdrawn by the devFund at any time
-    //     sponsorships[devFund] += devFundAmount;
-
-    //     totalDiceValue += newDiceValue;
-    //     totalSponsorships += devFundAmount;
-
-    //     emit Fees(receiver, devFundAmount, prizeFundShares, totalDiceValue, totalSponsorships);
-
-    //     // TODO: make this public so that a frame can easily show the current dice bag that is for sale
-    //     (uint256[] memory diceIds, uint256[] memory diceAmounts) = randomPieces(prng, numDice);
-
-    //     // nft.mint(receiver, diceIds, diceAmounts);
-    //     revert("minting is being refactored");
-    // }
-
     // TODO: how should we allow people to set their dice bags? let playerInfo approve another contract to do it. maybe just overload the operator on the NFT?
     function chooseDice(
         address player,
@@ -377,11 +339,6 @@ contract GrimeDiceV0 is GamePiece {
      */
 
     // TODO: `battle` function that works like skirmish but is done with a secure commit-reveal scheme
-
-    // // a future contract will want this function. but we don't want it in V1
-    // function release() public onlyOwner {
-    //     _setOwner(address(0));
-    // }
 
     // TODO: recover 6909 tokens
 }
