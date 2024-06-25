@@ -97,16 +97,6 @@ contract GameToken is ERC20 {
     }
 
     /// @dev we don't control the vault and so name might change
-    function _constantNameHash()
-        internal
-        view
-        override
-        returns (bytes32 result)
-    {
-        return keccak256(bytes(name()));
-    }
-
-    /// @dev we don't control the vault and so name might change
     function name() public view override returns (string memory) {
         // we could cache these, but these methods are mostly used off-chain and so this is fine
         return string(abi.encodePacked("Gamified ", asset.name()));
