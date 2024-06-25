@@ -68,6 +68,8 @@ contract GameTokenTest is Test {
 
         vaultAsset.approve(address(gameToken), type(uint256).max);
 
+        uint256 start = block.timestamp;
+
         // TODO: return the number of shares, too?
         uint256 numTokens = gameToken.depositAsset(100 * vaultAssetShift);
 
@@ -84,19 +86,26 @@ contract GameTokenTest is Test {
 
         uint256 sharesBurned = gameToken.withdrawAsset(numTokens);
 
+        uint256 end = block.timestamp;
+
         console.log("shares burned:", sharesBurned);
 
         require(gameToken.balanceOf(alice) == 0, "bad balance post burn");
         require(gameToken.totalSupply() == 0, "bad total supply post burn");
 
+        require(!twabController.hasFinalized(end), "end should not be finalized yet");
+
         skip(uint256(periodLength));
 
-        uint256 twabBalance = twabController.getTwabBetween(address(gameToken), alice, block.timestamp - periodLength * 2, block.timestamp - periodLength);
+        require(twabController.hasFinalized(end), "end not finalized");
 
-        console.log("twab balance:", twabBalance);
+        uint256 twabBalance = twabController.getTwabBetween(address(gameToken), alice, start, end);
+        uint256 twabSupply = twabController.getTotalSupplyTwabBetween(address(gameToken), start, end);
+
+        console.log("twabBalance:", twabBalance);
+        console.log("twabSupply:", twabSupply);
 
         require(twabBalance > 0, "bad twab balance post burn");
-
-        // TODO: what else should we test?
+        require(twabBalance == twabSupply, "bad twab supply post burn");
     }
 }
