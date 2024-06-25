@@ -51,7 +51,7 @@ contract TwabControllerTest is Test {
         address alice = makeAddr("alice");
 
         // initial state
-        uint256 x = twabController.totalSupply(address(this));
+        uint256 x = twabController.totalSupply(address(token));
 
         assertEq(x, 0, "bad total supply");
 
@@ -67,7 +67,7 @@ contract TwabControllerTest is Test {
         // burning
         twabController.burn(alice, amount);
 
-        x = twabController.totalSupply(address(this));
+        x = twabController.totalSupply(address(token));
 
         assertEq(x, 0, "bad total supply after burn");
     }

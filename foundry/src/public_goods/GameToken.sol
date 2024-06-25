@@ -87,13 +87,12 @@ contract GameToken is ERC20 {
 
         uint96 amount96 = SafeCastLib.toUint96(amount);
 
-        // TODO: why does this revert?!
         if (from == address(0)) {
-            // twabController.mint(to, amount96);
+            twabController.mint(to, amount96);
         } else if (to == address(0)) {
-            // twabController.burn(from, amount96);
+            twabController.burn(from, amount96);
         } else {
-            // twabController.transfer(from, to, amount96);
+            twabController.transfer(from, to, amount96);
         }
     }
 

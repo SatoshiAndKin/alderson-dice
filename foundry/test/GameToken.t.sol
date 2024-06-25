@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.26;
 
-import {Test, console} from "@forge-std/Test.sol";
-import {GameTokenMachine} from "../src/public_goods/GameTokenMachine.sol";
 import {GameToken, ERC20, ERC4626} from "../src/public_goods/GameToken.sol";
-import {YearnVaultV3, YearnVaultV3Strategy} from "../src/external/YearnVaultV3.sol";
+import {GameTokenMachine} from "../src/public_goods/GameTokenMachine.sol";
+import {Test, console} from "@forge-std/Test.sol";
+import {TestERC20} from "./TwabController.t.sol";
 import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
+import {YearnVaultV3, YearnVaultV3Strategy} from "../src/external/YearnVaultV3.sol";
 
 // TODO: make sure one user depositing doesn't reduce the value of another user's tokens
 // TODO: check against the various inflation attacks
@@ -23,6 +24,7 @@ contract GameTokenTest is Test {
     uint256 vaultAssetShift;
 
     uint256 arbitrumFork;
+    uint32 periodLength;
 
     function setUp() public {
         arbitrumFork = vm.createFork(vm.envString("ARBITRUM_RPC_URL"));
@@ -40,8 +42,14 @@ contract GameTokenTest is Test {
 
         console.log("vaultAsset:", address(vaultAsset));
 
-        // <https://dev.pooltogether.com/protocol/deployments/arbitrum>
-        twabController = TwabController(0x971ECc4E75c5FcFd8fc3eADc8F0c900b5914DC75);
+        periodLength = 1 weeks;
+        uint32 when = uint32(block.timestamp / periodLength * periodLength);
+        uint256 now_ = block.timestamp;
+
+        // TODO: i don't think we should need this, but timestamps seem weird with forked mode
+        vm.warp(now_);
+
+        twabController = new TwabController(periodLength, when);
 
         gameTokenMachine = new GameTokenMachine(twabController);
 
@@ -52,7 +60,7 @@ contract GameTokenTest is Test {
         deal(address(vaultAsset), alice, 1_000 * vaultAssetShift);
     }
 
-    function testSimpleDepositAndWithdraw() public {
+    function test_simpleDepositAndWithdraw() public {
         require(gameToken.balanceOf(address(this)) == 0, "bad starting balance");
         require(gameToken.totalSupply() == 0, "bad total supply");
 
@@ -67,6 +75,8 @@ contract GameTokenTest is Test {
 
         require(gameToken.balanceOf(alice) == numTokens, "bad balance post mint");
 
+        skip(uint256(periodLength));
+
         // TODO: this reverts inside of twab. why?
         // require(twabController.balanceOf(address(gameToken), alice) == numTokens, "bad twab balance post mint");
 
@@ -78,6 +88,14 @@ contract GameTokenTest is Test {
 
         require(gameToken.balanceOf(alice) == 0, "bad balance post burn");
         require(gameToken.totalSupply() == 0, "bad total supply post burn");
+
+        skip(uint256(periodLength));
+
+        uint256 twabBalance = twabController.getTwabBetween(address(gameToken), alice, block.timestamp - periodLength * 2, block.timestamp - periodLength);
+
+        console.log("twab balance:", twabBalance);
+
+        require(twabBalance > 0, "bad twab balance post burn");
 
         // TODO: what else should we test?
     }
