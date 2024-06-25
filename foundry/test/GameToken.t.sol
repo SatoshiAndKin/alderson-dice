@@ -72,14 +72,30 @@ contract GameTokenTest is Test {
 
         // TODO: return the number of shares, too?
         uint256 numTokens = gameToken.depositAsset(100 * vaultAssetShift);
-
         console.log("numTokens:", numTokens);
-
         require(gameToken.balanceOf(alice) == numTokens, "bad balance post mint");
+
+        // fake some interest before the twab period is finished
+        require(! twabController.hasFinalized(block.timestamp), "now should not be finalized");
+        uint256 fakedInterest = 100 * vaultAssetShift;
+        deal(address(vault), address(gameToken), fakedInterest);
+        
+        // TODO: better asserts
+        (uint256 p, uint256 x, uint256 y) = gameToken.forwardEarnings();
+        require(p == 0, "bad p");
+        require(x > 0, "no x");
+        require(x == gameToken.totalForwardedShares(), "bad total forwarded shares");
+        require(y > 0, "no y");
+        require(y == gameToken.totalForwardedValue(), "bad total forwarded value");
+
+        (uint256 period0Shares, uint256 period0Value) = gameToken.forwardedEarningsByPeriod(0);
+
+        require(period0Shares > 0, "no period 0 shares recorded");
+        require(period0Value > 0, "no period 0 value recorded");
 
         skip(uint256(periodLength));
 
-        // TODO: this reverts inside of twab. why?
+        // TODO: this reverts inside of twab. why? it might be fixed now. try it out
         // require(twabController.balanceOf(address(gameToken), alice) == numTokens, "bad twab balance post mint");
 
         require(gameToken.totalSupply() == numTokens, "bad total supply post mint");
@@ -93,10 +109,8 @@ contract GameTokenTest is Test {
         require(gameToken.balanceOf(alice) == 0, "bad balance post burn");
         require(gameToken.totalSupply() == 0, "bad total supply post burn");
 
-        require(!twabController.hasFinalized(end), "end should not be finalized yet");
-
+        // finish this period
         skip(uint256(periodLength));
-
         require(twabController.hasFinalized(end), "end not finalized");
 
         uint256 twabBalance = twabController.getTwabBetween(address(gameToken), alice, start, end);
@@ -105,7 +119,18 @@ contract GameTokenTest is Test {
         console.log("twabBalance:", twabBalance);
         console.log("twabSupply:", twabSupply);
 
-        require(twabBalance > 0, "bad twab balance post burn");
+        // TODO: what balance should we actually expect
+        require(twabBalance > 0, "too small of a twab balance post burn");
+        require(twabBalance < numTokens, "too large of a twab balance post burn");
         require(twabBalance == twabSupply, "bad twab supply post burn");
+
+        uint256 claimed = gameToken.claimPoints(10, alice);
+
+        require(claimed > 0, "no claimed points");
+
+        // TODO: how many points should we have? i think it should be `fakedInterest`
+        // require(gameToken.pointsOf(alice) == fakedInterest, "bad points post burn");
+
+        revert("todo: redeem the points for the interest");
     }
 }

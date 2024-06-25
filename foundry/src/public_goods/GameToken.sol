@@ -14,6 +14,8 @@ import {SafeCastLib} from "@solady/utils/SafeCastLib.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {TwabController} from "@pooltogether-v5-twab-controller/TwabController.sol";
 
+import {console} from "@forge-std/console.sol";
+
 // TODO: rewrite this as an ERC4626?
 contract GameToken is ERC20 {
     using SafeTransferLib for address;
@@ -41,6 +43,12 @@ contract GameToken is ERC20 {
     mapping(uint256 => ForwardedEarnings) public forwardedEarningsByPeriod;
 
     mapping(address => uint256 lastClaimTimestamp) public playerClaims;
+
+    event ForwardedEarningsForPeriod(
+        uint256 period,
+        uint256 shares,
+        uint256 amount
+    );
 
     constructor(
         ERC20 _asset,
@@ -241,25 +249,17 @@ contract GameToken is ERC20 {
 
     function excessShares() public view returns (uint256 shares) {
         uint256 vaultBalance = vault.balanceOf(address(this));
-
-        if (vaultBalance == 0) {
-            return shares;
-        }
-
         uint256 totalTokenValue = totalSupply();
-
-        if (totalTokenValue == 0) {
-            return shares;
-        }
 
         // withdraw takes the amount of assets and returns the number of shares burned
         uint256 sharesNeeded = vault.previewWithdraw(totalTokenValue);
 
-        if (sharesNeeded <= vaultBalance) {
-            return 0;
+        if (vaultBalance < sharesNeeded) {
+            // TODO: this should just return 0
+            revert("insufficient shares");
         }
 
-        shares = sharesNeeded - vaultBalance;
+        shares = vaultBalance - sharesNeeded;
     }
 
     function excess() public view returns (uint256 shares, uint256 amount) {
@@ -270,11 +270,16 @@ contract GameToken is ERC20 {
         }
     }
 
-    function forwardEarnings() public returns (uint256 shares, uint256 amount) {
+    function forwardEarnings()
+        public
+        returns (uint256 period, uint256 shares, uint256 amount)
+    {
         (shares, amount) = excess();
 
+        period = twabController.getTimestampPeriod(block.timestamp);
+
         if (shares == 0 || amount == 0) {
-            return (0, 0);
+            return (period, shares, amount);
         }
 
         // TODO: something similar to time-weighted average balancce controller from pooltogether
@@ -283,7 +288,6 @@ contract GameToken is ERC20 {
         totalForwardedValue += amount;
 
         // TODO: the timestamp truncation/wrapping is handled inside the twab controller. but we need to make sure our contract handles that correctly, too
-        uint256 period = twabController.getTimestampPeriod(block.timestamp);
 
         ForwardedEarnings storage periodEarnings = forwardedEarningsByPeriod[
             period
@@ -291,6 +295,8 @@ contract GameToken is ERC20 {
 
         periodEarnings.shares += shares;
         periodEarnings.amount += amount;
+
+        emit ForwardedEarningsForPeriod(period, shares, amount);
 
         // TODO: optionally do multiple transfers here based on some share math?
         // TODO: don't just transfer. call a deposit method? this should make it more secure against inflation attacks
@@ -304,10 +310,10 @@ contract GameToken is ERC20 {
         uint32 maxPeriods,
         address player
     ) public returns (uint256 points) {
-        uint256 lastClaimTimestamp = uint32(playerClaims[player]);
+        uint256 lastClaimTimestamp = playerClaims[player];
         // if lastClaimTimestamp is 0, set it to the timestamp for the first week of rewards
         if (lastClaimTimestamp == 0) {
-            lastClaimTimestamp = uint32(deployTimestamp);
+            lastClaimTimestamp = deployTimestamp;
         }
 
         // TODO: does this handle wrapping correctly? probably not
@@ -316,39 +322,70 @@ contract GameToken is ERC20 {
             block.timestamp
         );
 
+        if (period >= currentPeriod) {
+            revert("period wrapped");
+        }
+
         // TODO: is this a good way to re-use twab's periods?
         uint256 periodDuration = uint256(twabController.PERIOD_LENGTH());
 
         for (uint256 i = 0; i < maxPeriods; i++) {
-            if (period >= currentPeriod) {
-                // don't allow claiming the current period
+            console.log("checking period/iteration:", period, i);
+
+            // TODO: tests for how it handles wrapping!
+            uint256 claimUpTo = lastClaimTimestamp + periodDuration;
+
+            if (!twabController.hasFinalized(claimUpTo)) {
+                console.log("not finalized");
                 break;
             }
 
             ForwardedEarnings
                 storage periodEarnings = forwardedEarningsByPeriod[period];
 
-            // TODO: tests for how it handles wrapping!
-            uint256 claimUpTo = lastClaimTimestamp + periodDuration;
-
-            uint256 weightedBalance = twabController.getTwabBetween(
-                address(this),
-                player,
-                lastClaimTimestamp,
-                claimUpTo
+            console.log(
+                "period earnings:",
+                periodEarnings.shares,
+                periodEarnings.amount
             );
-            uint256 weightedTotalSupply = twabController
-                .getTotalSupplyTwabBetween(
+
+            if (periodEarnings.amount > 0) {
+                uint256 averageBalance = twabController.getTwabBetween(
                     address(this),
+                    player,
                     lastClaimTimestamp,
                     claimUpTo
                 );
 
-            points += FixedPointMathLib.fullMulDiv(
-                periodEarnings.amount,
-                weightedBalance,
-                weightedTotalSupply
-            );
+                if (averageBalance == 0) {
+                    console.log(
+                        "no average balance",
+                        lastClaimTimestamp,
+                        claimUpTo
+                    );
+                } else {
+                    uint256 averageTotalSupply = twabController
+                        .getTotalSupplyTwabBetween(
+                            address(this),
+                            lastClaimTimestamp,
+                            claimUpTo
+                        );
+
+                    if (averageTotalSupply == 0) {
+                        console.log(
+                            "no average total supply",
+                            lastClaimTimestamp,
+                            claimUpTo
+                        );
+                    } else {
+                        points += FixedPointMathLib.fullMulDiv(
+                            periodEarnings.amount,
+                            averageBalance,
+                            averageTotalSupply
+                        );
+                    }
+                }
+            }
 
             period += 1;
             lastClaimTimestamp = claimUpTo;
@@ -357,6 +394,8 @@ contract GameToken is ERC20 {
         // update storage once after the loop
         playerClaims[player] = lastClaimTimestamp;
 
-        pointsToken.mint(player, points);
+        if (points > 0) {
+            pointsToken.mint(player, points);
+        }
     }
 }

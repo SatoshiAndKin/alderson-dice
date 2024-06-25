@@ -34,7 +34,7 @@ contract PointsToken is ERC20 {
         uint256 amount
     ) internal override {
         uint96 amount96 = SafeCastLib.toUint96(amount);
-        
+
         if (from == address(0)) {
             twabController.mint(to, amount96);
         } else if (to == address(0)) {
