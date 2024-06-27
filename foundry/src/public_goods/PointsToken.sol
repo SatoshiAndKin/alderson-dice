@@ -48,7 +48,10 @@ contract PointsToken is ERC20 {
         vault.transfer(player, numPoints);
     }
 
-    function redeemPointsForAsset(address player, uint256 numPoints) public returns (uint256 assets) {
+    function redeemPointsForAsset(
+        address player,
+        uint256 numPoints
+    ) public returns (uint256 assets) {
         if (msg.sender != player) {
             _spendAllowance(msg.sender, player, numPoints);
         }

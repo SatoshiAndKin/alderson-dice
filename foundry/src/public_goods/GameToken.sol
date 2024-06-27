@@ -38,16 +38,9 @@ contract GameToken is ERC20 {
 
     mapping(address player => uint256 lastClaimTimestamp) public playerClaims;
 
-    event ForwardedEarningsForPeriod(
-        uint256 period,
-        uint256 shares
-    );
+    event ForwardedEarningsForPeriod(uint256 period, uint256 shares);
 
-    constructor(
-        ERC20 _asset,
-        TwabController _twabController,
-        ERC4626 _vault
-    ) {
+    constructor(ERC20 _asset, TwabController _twabController, ERC4626 _vault) {
         asset = _asset;
         ASSET_DECIMALS = _asset.decimals();
         twabController = _twabController;
@@ -58,7 +51,9 @@ contract GameToken is ERC20 {
 
         PERIOD_LENGTH = twabController.PERIOD_LENGTH();
 
-        FIRST_PERIOD_START_TIME = uint32(twabController.periodEndOnOrAfter(block.timestamp) - PERIOD_LENGTH);
+        FIRST_PERIOD_START_TIME = uint32(
+            twabController.periodEndOnOrAfter(block.timestamp) - PERIOD_LENGTH
+        );
 
         resetApproval();
     }
@@ -73,7 +68,10 @@ contract GameToken is ERC20 {
     }
 
     function resetApproval() public {
-        address(vault).safeApproveWithRetry(address(pointsToken), type(uint256).max);
+        address(vault).safeApproveWithRetry(
+            address(pointsToken),
+            type(uint256).max
+        );
     }
 
     /// @dev Hook that is called after any transfer of tokens.
@@ -112,7 +110,9 @@ contract GameToken is ERC20 {
     }
 
     /// @notice the primary entrypoint for users to deposit their own assets
-    function depositAsset(uint256 amount) public returns (uint256 shares, uint256 redeemableAmount) {
+    function depositAsset(
+        uint256 amount
+    ) public returns (uint256 shares, uint256 redeemableAmount) {
         return depositAsset(amount, msg.sender);
     }
 
@@ -263,10 +263,7 @@ contract GameToken is ERC20 {
         }
     }
 
-    function forwardEarnings()
-        public
-        returns (uint256 period, uint256 shares)
-    {
+    function forwardEarnings() public returns (uint256 period, uint256 shares) {
         // TODO: the timestamp truncation/wrapping is handled inside the twab controller. but we need to make sure our contract handles that correctly, too
         period = twabController.getTimestampPeriod(block.timestamp);
 
@@ -301,14 +298,17 @@ contract GameToken is ERC20 {
 
         // TODO: does this handle wrapping correctly? probably not
         uint256 period = twabController.getTimestampPeriod(lastClaimTimestamp);
-        uint256 currentPeriod = twabController.getTimestampPeriod(block.timestamp);
+        uint256 currentPeriod = twabController.getTimestampPeriod(
+            block.timestamp
+        );
 
         if (period >= currentPeriod) {
             revert("period wrapped");
         }
 
         // TODO: is this a good way to re-use twab's periods?
-        uint256 currentOverwritePeriodStartedAt = twabController.currentOverwritePeriodStartedAt();
+        uint256 currentOverwritePeriodStartedAt = twabController
+            .currentOverwritePeriodStartedAt();
 
         for (uint256 i = 0; i < maxPeriods; i++) {
             console.log("checking period/iteration:", period, i);
