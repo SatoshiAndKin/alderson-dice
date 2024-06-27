@@ -50,8 +50,8 @@ contract GameTokenTest is Test {
         // uint32 start = block.timestamp - 1 days;
 
         // TODO: i don't think we should need this, but timestamps seem weird with forked mode
-        // TODO: really not sure about this
-        vm.warp(start + 1 days);
+        // TODO: really not sure about this +1
+        vm.warp(start + 1);
 
         twabController = new TwabController(periodLength, start);
 
@@ -62,6 +62,8 @@ contract GameTokenTest is Test {
         pointsToken = gameToken.pointsToken();
 
         vaultAssetShift = 10 ** vaultAsset.decimals();
+
+        require(vaultAssetShift > 0, "bad vault asset shift");
 
         deal(address(vaultAsset), alice, 1_000 * vaultAssetShift);
     }
@@ -76,28 +78,40 @@ contract GameTokenTest is Test {
 
         uint256 start = block.timestamp;
 
-        // TODO: return the number of shares, too?
-        uint256 numTokens = gameToken.depositAsset(100 * vaultAssetShift);
+        (uint256 numShares, uint256 numTokens) = gameToken.depositAsset(100 * vaultAssetShift);
+        console.log("numShares:", numShares);
         console.log("numTokens:", numTokens);
-        require(gameToken.balanceOf(alice) == numTokens, "bad balance post mint");
+
+        assertEq(vault.balanceOf(address(gameToken)), numShares, "bad vault balance for gameToken post depositAsset");
+
+        assertEq(gameToken.balanceOf(alice), numTokens, "bad balance post mint");
+        assertEq(vault.balanceOf(address(gameToken)), numShares, "bad vault balance for gameToken post mint");
+        assertEq(vault.balanceOf(address(pointsToken)), 0, "bad vault balance for pointsToken post mint");
 
         // fake some interest before the twab period is finished
         require(! twabController.hasFinalized(block.timestamp), "now should not be finalized");
+
         uint256 fakedInterest = 100 * vaultAssetShift;
-        deal(address(vault), address(gameToken), fakedInterest);
-        
-        // TODO: better asserts
-        (uint256 p, uint256 x, uint256 y) = gameToken.forwardEarnings();
-        require(p == 0, "bad p");
-        require(x > 0, "no x");
-        require(x == gameToken.totalForwardedShares(), "bad total forwarded shares");
-        require(y > 0, "no y");
-        require(y == gameToken.totalForwardedValue(), "bad total forwarded value");
+        deal(address(vault), address(gameToken), fakedInterest + numTokens);
 
-        (uint256 period0Shares, uint256 period0Value) = gameToken.forwardedEarningsByPeriod(0);
+        // TODO: what should these balances actually be?
+        assertEq(vault.balanceOf(address(gameToken)), fakedInterest + numTokens, "bad vault balance for gameToken post deal");
+        assertEq(vault.balanceOf(address(pointsToken)), 0, "bad vault balance for pointsToken post deal");
+        assertEq(vault.balanceOf(alice), 0, "bad vault balance for alice post deal");
 
-        require(period0Shares > 0, "no period 0 shares recorded");
-        require(period0Value > 0, "no period 0 value recorded");
+        // TODO: this isn't forwarding everything i expect it to. assert more and figure out why. something about excess calculating low
+        (uint256 p, uint256 earnedShares) = gameToken.forwardEarnings();
+        assertEq(p, 0, "bad period");
+        require(earnedShares > 0, "bad earnedShares");
+        assertEq(earnedShares, gameToken.totalForwardedShares(), "bad total forwarded shares");
+
+        assertEq(pointsToken.balanceOf(address(gameToken)), earnedShares, "bad points balance for gameToken");
+        assertEq(pointsToken.balanceOf(address(pointsToken)), 0, "bad points balance for pointsToken");
+        assertEq(pointsToken.balanceOf(alice), 0, "bad points balance for alice");
+
+        uint256 period0Shares = gameToken.pointsByPeriod(p);
+
+        assertEq(period0Shares, earnedShares, "bad period 0 shares recorded");
 
         skip(uint256(periodLength));
 
@@ -115,8 +129,8 @@ contract GameTokenTest is Test {
         require(gameToken.balanceOf(alice) == 0, "bad balance post burn");
         require(gameToken.totalSupply() == 0, "bad total supply post burn");
 
-        // finish this period
-        skip(uint256(periodLength));
+        // finish this period and the next
+        skip(uint256(periodLength * 3));
         require(twabController.hasFinalized(end), "end not finalized");
 
         uint256 twabBalance = twabController.getTwabBetween(address(gameToken), alice, start, end);
@@ -139,9 +153,9 @@ contract GameTokenTest is Test {
 
         uint256 claimedAssets = pointsToken.redeemPointsForAsset(alice, claimedPoints);
         console.log("claimed assets:", claimedAssets);
+        console.log("fakedInterest:", fakedInterest);
 
-        // TODO: how much of the fakedInterest should be ours? we don't have the period lined up to take 100%
-        // TODO: this is not exactly what we want. claimed assets should be converted to shares and then compared for equality
-        require(claimedAssets > claimedPoints, "bad points value");
+        // this is reverting. something is wrong with our contracts because we should own 100% of the interest
+        require(claimedAssets >= fakedInterest, "did not claim enough assets");
     }
 }
