@@ -40,7 +40,6 @@ contract GameTokenMachine {
         // create2 is important so addresses are predictable
         gameToken = new GameToken{salt: bytes32(0)}(
             asset,
-            earnings,
             twabController,
             vault
         );

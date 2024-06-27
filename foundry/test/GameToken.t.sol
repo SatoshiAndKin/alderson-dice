@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.26;
 
-import {GameToken, ERC20, ERC4626} from "../src/public_goods/GameToken.sol";
+import {GameToken, ERC20, ERC4626, PointsToken} from "../src/public_goods/GameToken.sol";
 import {GameTokenMachine} from "../src/public_goods/GameTokenMachine.sol";
 import {Test, console} from "@forge-std/Test.sol";
 import {TestERC20} from "./TwabController.t.sol";
@@ -14,6 +14,7 @@ contract GameTokenTest is Test {
     TwabController twabController;
     GameTokenMachine gameTokenMachine;
     GameToken gameToken;
+    PointsToken pointsToken;
 
     address alice;
     address earnings;
@@ -43,17 +44,22 @@ contract GameTokenTest is Test {
         console.log("vaultAsset:", address(vaultAsset));
 
         periodLength = 1 weeks;
-        uint32 when = uint32(block.timestamp / periodLength * periodLength);
-        uint256 now_ = block.timestamp;
+
+        // set the start offset to right now
+        uint32 start = uint32(block.timestamp);
+        // uint32 start = block.timestamp - 1 days;
 
         // TODO: i don't think we should need this, but timestamps seem weird with forked mode
-        vm.warp(now_);
+        // TODO: really not sure about this
+        vm.warp(start + 1 days);
 
-        twabController = new TwabController(periodLength, when);
+        twabController = new TwabController(periodLength, start);
 
         gameTokenMachine = new GameTokenMachine(twabController);
 
         gameToken = gameTokenMachine.createGameToken(vault, earnings);
+
+        pointsToken = gameToken.pointsToken();
 
         vaultAssetShift = 10 ** vaultAsset.decimals();
 
@@ -124,13 +130,18 @@ contract GameTokenTest is Test {
         require(twabBalance < numTokens, "too large of a twab balance post burn");
         require(twabBalance == twabSupply, "bad twab supply post burn");
 
-        uint256 claimed = gameToken.claimPoints(10, alice);
-
-        require(claimed > 0, "no claimed points");
+        uint256 claimedPoints = gameToken.claimPoints(10, alice);
+        console.log("claimed points:", claimedPoints);
+        require(claimedPoints > 0, "no claimed points");
 
         // TODO: how many points should we have? i think it should be `fakedInterest`
         // require(gameToken.pointsOf(alice) == fakedInterest, "bad points post burn");
 
-        revert("todo: redeem the points for the interest");
+        uint256 claimedAssets = pointsToken.redeemPointsForAsset(alice, claimedPoints);
+        console.log("claimed assets:", claimedAssets);
+
+        // TODO: how much of the fakedInterest should be ours? we don't have the period lined up to take 100%
+        // TODO: this is not exactly what we want. claimed assets should be converted to shares and then compared for equality
+        require(claimedAssets > claimedPoints, "bad points value");
     }
 }

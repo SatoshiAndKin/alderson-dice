@@ -33,7 +33,6 @@ contract GameToken is ERC20 {
     uint256 public totalForwardedShares;
     uint256 public totalForwardedValue;
 
-    address public immutable earningsAddress;
     uint32 internal immutable deployTimestamp;
 
     struct ForwardedEarnings {
@@ -52,7 +51,6 @@ contract GameToken is ERC20 {
 
     constructor(
         ERC20 _asset,
-        address _earningsAddress,
         TwabController _twabController,
         ERC4626 _vault
     ) {
@@ -64,12 +62,12 @@ contract GameToken is ERC20 {
         assetDecimals = _asset.decimals();
 
         // TODO: use LibClone for PointsToken. the token uses immutables though so we need to figure out clones with immutables
-        pointsToken = new PointsToken(asset, twabController);
+        pointsToken = new PointsToken(_vault, twabController);
 
         // used to optimize the initial claim
         deployTimestamp = uint32(block.timestamp);
 
-        earningsAddress = _earningsAddress;
+        resetApproval();
     }
 
     modifier decentralizedButtonPushing() {
@@ -79,6 +77,10 @@ contract GameToken is ERC20 {
         // TODO: only do if a certain amount of time has passed since the last time this was run
         // TODO: only do this if the vault share price has changed
         forwardEarnings();
+    }
+
+    function resetApproval() public {
+        address(vault).safeApproveWithRetry(address(pointsToken), type(uint256).max);
     }
 
     /// @dev Hook that is called after any transfer of tokens.
@@ -296,13 +298,11 @@ contract GameToken is ERC20 {
         periodEarnings.shares += shares;
         periodEarnings.amount += amount;
 
+        // create points tokens that can be claimed
+        pointsToken.mint(address(this), shares);
+
+        // TODO: emit this event or something better? or is the Transfer enough?
         emit ForwardedEarningsForPeriod(period, shares, amount);
-
-        // TODO: optionally do multiple transfers here based on some share math?
-        // TODO: don't just transfer. call a deposit method? this should make it more secure against inflation attacks
-        vault.transfer(earningsAddress, shares);
-
-        // TODO: emit an event
     }
 
     // TODO: this is going to need a lot of thought. we need to make sure we don't allow people to claim multiple times in the same period
@@ -379,7 +379,7 @@ contract GameToken is ERC20 {
                         );
                     } else {
                         points += FixedPointMathLib.fullMulDiv(
-                            periodEarnings.amount,
+                            periodEarnings.shares,
                             averageBalance,
                             averageTotalSupply
                         );
@@ -395,7 +395,7 @@ contract GameToken is ERC20 {
         playerClaims[player] = lastClaimTimestamp;
 
         if (points > 0) {
-            pointsToken.mint(player, points);
+            pointsToken.transfer(player, points);
         }
     }
 }
